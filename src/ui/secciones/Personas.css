@@ -1,0 +1,28 @@
+.personas { display: grid; grid-template-columns: minmax(380px, 440px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.personas-lista, .personas-ficha { min-width: 0; }
+.personas-filtros { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: flex-end; margin-bottom: 6px; }
+.personas-filtros .campo { margin: 0; }
+.personas-filtros input[type='search'] { width: 150px; }
+.personas-filtros select { width: auto; }
+.personas-tabla-marco { max-height: calc(100vh - 290px); min-height: 200px; overflow: auto; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+.personas-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.personas-tabla th { position: sticky; top: 0; background: var(--fondo); text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--borde); font-weight: 600; }
+.personas-tabla td { padding: 3px 6px; border-bottom: 1px solid var(--borde); vertical-align: middle; }
+.personas-tabla tr.seleccionada td { background: var(--acento-fondo); }
+.personas-tabla tr.inactiva td { color: var(--texto-suave); }
+.personas-tabla .num { text-align: right; }
+.personas-tabla .enlace-fila { background: none; border: 0; padding: 2px 0; font: inherit; font-weight: 600; color: var(--acento); cursor: pointer; text-decoration: underline; white-space: nowrap; }
+.personas-ficha-cuerpo { max-height: calc(100vh - 150px); overflow: auto; }
+.personas-ficha h3 { margin-bottom: 8px; }
+.personas-acciones { position: sticky; bottom: 0; background: var(--superficie); padding: 8px 0 2px; border-top: 1px solid var(--borde); margin-top: 10px; }
+.personas-acciones .mensaje { margin: 0 0 8px; }
+.restriccion-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.restriccion-nota { margin: 6px 0; }
+.restriccion-nueva { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.restriccion-nueva .campo { margin: 0; }
+.duracion-anulable { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.duracion-anulable .campo, .duracion-anulable .casilla { margin: 0; }
+@media (max-width: 900px) {
+  .personas { grid-template-columns: minmax(0, 1fr); }
+  .personas-lista { overflow-x: auto; }
+}

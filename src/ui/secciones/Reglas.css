@@ -1,0 +1,19 @@
+.reglas-banda { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; padding: 8px 12px; background: var(--aviso-fondo); border: 1px solid var(--aviso); border-radius: var(--radio); color: var(--aviso); }
+.reglas-banda p { margin: 0; flex: 1 1 320px; }
+.reglas-cuerpo { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr); gap: 16px; align-items: start; }
+.reglas-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.reglas-cabecera h2 { margin: 0; }
+.reglas-anadir { margin-bottom: 12px; padding: 8px 12px; background: var(--acento-fondo); border: 1px solid var(--borde); border-radius: var(--radio); }
+.reglas-grupo h3 { margin: 12px 0 4px; }
+.reglas-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.regla-fila { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 6px 10px; background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); }
+.regla-fila.seleccionada { border-color: var(--acento); border-width: 2px; }
+.regla-fila.descartada { background: var(--fondo); color: var(--texto-suave); }
+.regla-fila .regla-nombre { font: inherit; font-weight: 600; text-align: left; padding: 0; color: var(--acento); background: none; border: 0; cursor: pointer; text-decoration: underline; }
+.regla-fila .regla-descripcion { grid-column: 1 / -1; margin: 0; }
+.regla-fila .regla-meta { grid-column: 1 / -1; margin: 0; color: var(--texto-suave); font-size: 12px; }
+.regla-fila .regla-aviso { grid-column: 1 / -1; margin: 0; color: var(--peligro); font-size: 12px; font-weight: 600; }
+.regla-ficha h3 { margin-bottom: 8px; }
+.regla-ficha textarea { font-family: var(--fuente); font-size: 14px; min-height: 60px; }
+.regla-ficha input[type='text'] { width: 100%; }
+@media (max-width: 1000px) { .reglas-cuerpo { grid-template-columns: 1fr; } }

@@ -1,0 +1,22 @@
+.incidencias { max-width: 760px; }
+.incidencias .fila { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.incidencias .boton { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; }
+.incidencias-ficha, .incidencias-panel { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+.incidencias-panel { border-color: var(--aviso); }
+.incidencias-panel h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
+.incidencias-semanas { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.incidencias-semanas li { display: grid; gap: 4px; }
+.incidencias-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.incidencias-ficha select, .incidencias-ficha input[type='text'], .incidencias-ficha input[type='date'], .incidencias-filtros select, .incidencias-filtros input { min-height: 40px; width: 100%; box-sizing: border-box; }
+.incidencias-acciones { margin-top: 10px; }
+.incidencias-filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.incidencias-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.incidencia { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+.incidencia.momento-pasada { color: var(--texto-suave); }
+.incidencia.momento-enCurso { border-left: 4px solid var(--aviso); }
+.incidencia-texto { display: grid; gap: 2px; min-width: 0; }
+.incidencia-meta, .incidencia-nota { font-size: 12.5px; color: var(--texto-suave); }
+.incidencia-momento { font-weight: 600; }
+@media (max-width: 480px) {
+  .incidencias-fechas, .incidencias-filtros { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,23 @@
+.seccion-rotacion { display: flex; flex-direction: column; gap: 12px; }
+.seccion-rotacion .rotacion-bloque h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.seccion-rotacion h4 { margin: 12px 0 6px; font-size: 14px; }
+.rotacion-etiquetas { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.rotacion-etiquetas .campo { margin: 4px 0; }
+.rotacion-etiquetas input { width: 90px; }
+.rotacion-marco { max-width: 100%; overflow-x: auto; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+.rotacion-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.rotacion-tabla th, .rotacion-tabla td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--borde); vertical-align: middle; white-space: nowrap; }
+.rotacion-tabla thead th { background: var(--fondo); font-weight: 600; }
+.rotacion-tabla tr.seleccionada td, .rotacion-tabla tr.seleccionada th { background: var(--acento-fondo); }
+.rotacion-acciones { margin-top: 0; flex-wrap: nowrap; }
+.rotacion-nueva { margin: 10px 0; }
+.rotacion-selector-semana { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rotacion-efectos { margin: 6px 0; padding-left: 20px; }
+.rotacion-editor { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--borde); }
+.seccion-rotacion .barra-guardar { margin-top: 12px; }
+@media (max-width: 700px) {
+  .rotacion-etiquetas input { width: 100%; }
+  .rotacion-etiquetas .campo { flex: 1 1 40%; }
+  .rotacion-selector-semana { flex-direction: column; align-items: stretch; }
+  .seccion-rotacion .fila > .boton.primario { white-space: normal; text-align: left; }
+}

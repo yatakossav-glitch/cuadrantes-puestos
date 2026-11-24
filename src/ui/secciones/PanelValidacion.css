@@ -1,0 +1,44 @@
+/* Panel de validación. Se coloca debajo de la rejilla (ancho completo); también cabe en ~380 px. */
+.panel-validacion { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pv-semaforo { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid; border-radius: var(--radio); font-size: 15px; }
+.pv-semaforo .icono { width: 22px; height: 22px; }
+.pv-semaforo.verde { color: var(--ok); background: var(--ok-fondo); border-color: var(--ok); }
+.pv-semaforo.ambar { color: var(--aviso); background: var(--aviso-fondo); border-color: var(--aviso); }
+.pv-semaforo.rojo { color: var(--peligro); background: var(--peligro-fondo); border-color: var(--peligro); }
+.pv-penalizacion { display: block; font-size: 12px; color: var(--texto-suave); }
+
+.pv-bloque { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 8px; }
+.pv-bloque h3 { margin: 0 0 6px; }
+.pv-grupo h4 { margin: 8px 0 4px; font-size: 13px; }
+.pv-herramientas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 6px; }
+.pv-filtros { display: flex; gap: 4px; flex-wrap: wrap; }
+.pv-filtros .boton[aria-pressed='true'] { background: var(--acento-fondo); border-color: var(--acento); color: var(--acento); font-weight: 600; }
+.pv-agrupar, .pv-orden { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+
+.pv-lista { list-style: none; margin: 0 0 6px; padding: 0; max-height: 320px; overflow-y: auto; }
+.pv-item { border-bottom: 1px solid var(--borde); }
+.pv-incumplimiento {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; width: 100%; padding: 6px 8px;
+  text-align: left; font: inherit; color: var(--texto); background: none; border: 0; border-left: 4px solid; cursor: pointer;
+}
+.pv-item.obligatorio .pv-incumplimiento { border-left-color: var(--peligro); }
+.pv-item.preferencia .pv-incumplimiento { border-left-color: var(--aviso); }
+.pv-incumplimiento:hover:not([aria-disabled='true']) { background: var(--acento-fondo); }
+.pv-incumplimiento[aria-disabled='true'] { cursor: default; }
+.pv-etiqueta { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pv-nivel { grid-column: 2; font-size: 11px; color: var(--texto-suave); }
+
+.pv-pestanas { padding: 0; margin-bottom: 6px; border: 1px solid var(--borde); border-radius: var(--radio); }
+.pv-tabla-caja { max-width: 100%; overflow-x: auto; }
+.pv-tabla { border-collapse: collapse; font-size: 12px; width: 100%; }
+.pv-tabla th, .pv-tabla td { padding: 3px 6px; border-bottom: 1px solid var(--borde); text-align: right; white-space: nowrap; }
+.pv-tabla thead th { position: sticky; top: 0; background: var(--fondo); }
+.pv-tabla th[scope='row'], .pv-tabla thead th:first-child { text-align: left; }
+.pv-tabla th[scope='row'] { font-weight: 600; }
+.pv-desviada { font-weight: 600; }
+.pv-area { font-weight: 400; color: var(--texto-suave); }
+.pv-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pv-barra-fila { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.pv-barra { width: 90px; height: 8px; background: var(--fondo); border: 1px solid var(--borde-control); border-radius: 4px; overflow: hidden; }
+.pv-relleno { height: 100%; background: var(--aviso); }
+.pv-relleno.completo { background: var(--ok); }
