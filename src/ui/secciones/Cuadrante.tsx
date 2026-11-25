@@ -37,6 +37,7 @@ import {
   vaciarSemana,
   type HuecoEditable,
 } from '../../edicion/cuadrante';
+import { describirTurno, semanaConHorario, turnoDe } from '../../edicion/horarios';
 import { horarioDe } from '../../edicion/horario';
 import { crearIndice } from '../../validacion/indice';
 import { IconoSemaforo } from './PanelValidacion';
@@ -67,6 +68,8 @@ export interface PropsCuadrante {
   ejecutar?: EjecutorMotor;
   /** Petición externa de ir a una semana y, si `recubrir`, lanzar «Completar huecos». */
   peticion?: { lunes: FechaISO; recubrir: boolean; nonce: number } | null;
+  /** Abre la importación del horario de la plantilla (Datos). */
+  alImportarHorario?: () => void;
 }
 
 const PX_POR_MINUTO = 1.5;
@@ -152,13 +155,20 @@ function Marcas({ marcas }: { marcas: MarcaCelda[] }) {
   );
 }
 
+/** Personas con algún tramo de trabajo en el horario de la semana. */
+function personasQueTrabajan(estado: EstadoApp, lunes: FechaISO): number {
+  const h = estado.horarios[lunes];
+  if (!h) return 0;
+  return new Set(h.turnos.filter((t) => t.tramos.length > 0).map((t) => t.personaId)).size;
+}
+
 function puestoCerrado(estado: EstadoApp, puestoId: Id, fecha: FechaISO): boolean {
   return estado.incidencias.some((i) => i.tipo === 'puestoCerrado' && i.puestoId === puestoId && fecha >= i.desde && fecha <= i.hasta);
 }
 
 // ───────────────────────── Componente principal ─────────────────────────
 
-export function Cuadrante({ almacen, resultado, foco, alCambiarSemana, motor = motorReal, ejecutar, peticion = null }: PropsCuadrante) {
+export function Cuadrante({ almacen, resultado, foco, alCambiarSemana, motor = motorReal, ejecutar, peticion = null, alImportarHorario }: PropsCuadrante) {
   const estado = usarAlmacen(almacen);
   const raiz = useRef<HTMLDivElement>(null);
   const [lunes, setLunes] = useState<FechaISO>(() => lunesDe(hoyISO()));
@@ -386,6 +396,22 @@ export function Cuadrante({ almacen, resultado, foco, alCambiarSemana, motor = m
             })}
           </ul>
         </section>
+      )}
+
+      {semanaConHorario(estado, lunes) ? (
+        <p class="cq-aviso-horario" role="status">
+          Horario de la plantilla cargado: {personasQueTrabajan(estado, lunes)}{' '}
+          {personasQueTrabajan(estado, lunes) === 1 ? 'persona trabaja' : 'personas trabajan'} esta semana.
+        </p>
+      ) : (
+        <p class="cq-aviso-horario" role="status">
+          Esta semana no tiene horario de la plantilla: se puede asignar a cualquiera a cualquier hora.{' '}
+          {alImportarHorario && (
+            <button type="button" class="boton cq-mini" onClick={alImportarHorario}>
+              Importar horario
+            </button>
+          )}
+        </p>
       )}
 
       {vaciando && (
@@ -1006,6 +1032,9 @@ function VistaPersona(p: PropsVistaPersona) {
                 <h3>
                   {formatearDiaFecha(fecha)} <span class="cq-minutos">{formatearDuracion(minutos)}</span>
                 </h3>
+                {semanaConHorario(estado, fecha) && persona && (
+                  <p class="cq-turno">Turno: {describirTurno(turnoDe(estado, persona.id, fecha))}</p>
+                )}
                 {entradas.length === 0 ? (
                   <p class="ayuda">Sin huecos ni comidas.</p>
                 ) : (

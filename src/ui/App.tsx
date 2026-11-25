@@ -228,16 +228,17 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
           >
             {s.id === 'cuadrante' ? (
               <div>
-                <Cuadrante almacen={almacen} resultado={validacion.resultado} foco={foco} alCambiarSemana={setLunes} peticion={peticion} />
+                <Cuadrante almacen={almacen} resultado={validacion.resultado} foco={foco} alCambiarSemana={setLunes} peticion={peticion} alImportarHorario={() => setSeccion('datos')} />
                 <PanelValidacion
                   resultado={validacion.resultado}
                   resumen={validacion.resumen}
                   datos={estado}
+                  lunes={lunes}
                   alIr={(destino) => setFoco({ ...destino, nonce: Date.now() })}
                 />
               </div>
             ) : s.id === 'datos' ? (
-              <Datos almacen={almacen} textoIlegible={textoIlegible} />
+              <Datos almacen={almacen} textoIlegible={textoIlegible} alIrASemana={(l) => irASemana(l, false)} />
             ) : s.id === 'personas' ? (
               <Personas almacen={almacen} />
             ) : s.id === 'puestos' ? (

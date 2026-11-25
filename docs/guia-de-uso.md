@@ -55,12 +55,41 @@ Arriba verás las secciones: Cuadrante, Personas, Puestos, Reglas, Rotación, In
 
 ### Pasos
 
-1. Abre **Cuadrante**.
-2. Elige la semana con **Semana anterior**, **Esta semana**, **Semana siguiente** o «Ir a la semana de».
+1. Importa el horario de la semana que te han pasado (justo debajo, «Importar el horario de la plantilla»). Si lo guardas y pulsas **Ir a la semana**, ya estarás en el Cuadrante de esa semana.
+2. Abre **Cuadrante** y elige la semana con **Semana anterior**, **Esta semana**, **Semana siguiente** o «Ir a la semana de».
 3. Pulsa **Generar semana** (más abajo, los modos).
 4. Revisa el resultado y pulsa **Aplicar**.
 5. Mira el semáforo y corrige lo que haga falta.
 6. Copia a Excel (apartado 6).
+
+### Importar el horario de la plantilla
+
+El horario dice quién trabaja cada día y a qué horas; el cuadrante reparte después a esas personas entre los puestos. Si una semana no tiene horario, la aplicación puede asignar a cualquiera a cualquier hora (el Cuadrante te lo recuerda con un aviso y un botón **Importar horario**).
+
+1. Abre **Datos**: la primera tarjeta es **Horario de la plantilla**.
+2. Elige la semana con **Semana anterior**, **Semana siguiente** o el campo de fecha. Por defecto sale la semana siguiente a hoy.
+3. En Excel, selecciona la tabla (los códigos y los días), cópiala con Ctrl+C y pégala en «Pega aquí el horario copiado de Excel».
+4. Pulsa **Leer horario**. Verás una tabla persona por día con lo que se ha entendido (por ejemplo «10:00–15:45», «Libra») y, en rojo y con texto, las casillas que no se entienden.
+5. Si salen códigos que no existen, pulsa **Crear las N personas que faltan** (se crean sin habilitaciones; complétalas después en Personas).
+6. Corrige en Excel lo que haya dado error y vuelve a pegar. Mientras haya errores no se puede guardar. Los avisos (por ejemplo, personas activas que no figuran en el horario) no bloquean.
+7. Pulsa **Guardar horario de la semana**. Se te explicará el efecto (si reemplaza un horario anterior, si hay asignaciones que quedan fuera de turno…) y confirmas.
+8. Pulsa **Ir a la semana** para abrir el Cuadrante de esa semana.
+
+**Qué se puede escribir en cada casilla**
+
+- Una hora de entrada y de salida: `10:00-15:45`, `10-15:45`, `10.00 a 15.45`, `10h-15:45h`.
+- Turno partido: `10-14 y 17-21`, `10:00-14:00 / 17:00-21:00` o `10-14, 17-21`.
+- Una letra de turno: `M` (mañana) o `T` (tarde), también `mañana` o `tarde`; `M+T` junta los dos.
+- Libra: casilla vacía, `L`, `libre`, `descanso`, `fiesta`, `vacaciones`, `baja` o `-`. No se guarda el motivo.
+- Cualquier otra cosa se marca como error.
+
+Las letras se pueden cambiar o ampliar en **Turnos por letra** (letra, nombre y horas de cada turno, con **Añadir turno**). Esos ajustes solo valen mientras no cierres esa sección.
+
+Con la fila de cabecera (Lun, Mar… o fechas) las columnas se reconocen por nombre; si no hay cabecera, se toman siete columnas seguidas después de la de códigos, de lunes a domingo. Si un código sale repetido, vale la última fila.
+
+**Ver, corregir y quitar horarios guardados.** Más abajo, **Semanas con horario** lista cada semana con sus personas y horas. **Ver y editar** abre una rejilla con una casilla por persona y día, con los mismos formatos de arriba; **Guardar cambios** los aplica y **Descartar cambios** los olvida. **Quitar** borra el horario de esa semana (con confirmación y se puede deshacer).
+
+**Qué cambia en el Cuadrante.** Cada persona solo se asigna dentro de su turno; quien no figura en el horario no trabaja esa semana. En la vista **Por persona** ves el turno de cada día, y el resumen **Por persona** muestra las horas de turno junto a las asignadas.
 
 ### Los tres modos de Generar semana
 

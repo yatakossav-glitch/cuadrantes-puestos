@@ -6,7 +6,8 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
 import { formatearDuracion, formatearIntervalo } from '../../modelo/horas';
-import type { ClaveHueco, DatosPlanificacion, Id } from '../../modelo/tipos';
+import { minutosDeTurno } from '../../edicion/horarios';
+import type { ClaveHueco, DatosPlanificacion, FechaISO, Id } from '../../modelo/tipos';
 import type { Incumplimiento, MarcaCelda, ResultadoValidacion, Semaforo } from '../../reglas/contrato';
 import { METADATOS_GENERAL } from '../../reglas/metadatos-general';
 import { METADATOS_RESTRICCION } from '../../reglas/metadatos-persona';
@@ -33,6 +34,8 @@ export interface PropsPanelValidacion {
   resultado: ResultadoValidacion;
   resumen: { personas: ResumenPersona[]; puestos: ResumenPuesto[] };
   datos: DatosPlanificacion;
+  /** Lunes de la semana mostrada; con él se muestran las horas de turno si hay horario. */
+  lunes?: FechaISO;
   alIr: (destino: { asignacionId?: Id; hueco?: ClaveHueco }) => void;
 }
 
@@ -133,7 +136,8 @@ function textoDesviacion(d: number | null): string {
 
 const horasODia = (min: number) => (min > 0 ? formatearDuracion(min) : '');
 
-export function PanelValidacion({ resultado, resumen, datos, alIr }: PropsPanelValidacion) {
+export function PanelValidacion({ resultado, resumen, datos, lunes, alIr }: PropsPanelValidacion) {
+  const horario = lunes ? datos.horarios[lunes] : undefined;
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [agrupar, setAgrupar] = useState(false);
   const [verTodos, setVerTodos] = useState(false);
@@ -329,6 +333,7 @@ export function PanelValidacion({ resultado, resumen, datos, alIr }: PropsPanelV
                         </th>
                       ))}
                       <th scope="col">Total</th>
+                      {horario && <th scope="col">Turno</th>}
                       <th scope="col">Días</th>
                       {areasUsadas.map((a) => (
                         <th key={a.id} scope="col">{a.nombre}</th>
@@ -347,6 +352,7 @@ export function PanelValidacion({ resultado, resumen, datos, alIr }: PropsPanelV
                           <td key={n}>{horasODia(m)}</td>
                         ))}
                         <td>{horasODia(r.minutosSemana)}</td>
+                        {horario && <td>{horasODia(minutosDeTurno(horario, r.personaId))}</td>}
                         <td>{r.dias || ''}</td>
                         {areasUsadas.map((a) => (
                           <td key={a.id}>{horasODia(r.porArea[a.id] ?? 0)}</td>

@@ -33,12 +33,12 @@ const resumenPersona: ResumenPersona = {
 };
 const resumenPuesto: ResumenPuesto = { puestoId: puesto.id, huecos: 4, cubiertos: 3, porcentaje: 75 };
 
-async function montar(res: ResultadoValidacion, alIr = vi.fn()) {
+async function montar(res: ResultadoValidacion, alIr = vi.fn(), datosUsados = datos, lunes?: string) {
   raiz = document.createElement('div');
   document.body.appendChild(raiz);
   await act(() =>
     render(
-      <PanelValidacion resultado={res} resumen={{ personas: [resumenPersona], puestos: [resumenPuesto] }} datos={datos} alIr={alIr} />,
+      <PanelValidacion resultado={res} resumen={{ personas: [resumenPersona], puestos: [resumenPuesto] }} datos={datosUsados} lunes={lunes} alIr={alIr} />,
       raiz,
     ),
   );
@@ -137,5 +137,20 @@ describe('PanelValidacion', () => {
     expect(b.getAttribute('aria-disabled')).toBe('true');
     await act(() => b.click());
     expect(alIr).not.toHaveBeenCalled();
+  });
+
+  it('con horario en la semana, la tabla Por persona muestra la columna Turno', async () => {
+    await montar(resultado([]), vi.fn(), datos);
+    expect([...raiz.querySelectorAll('th')].some((t) => t.textContent === 'Turno')).toBe(false);
+    render(null, raiz);
+    raiz.remove();
+    const lunes = '2026-11-23';
+    const conHorario = {
+      ...datos,
+      horarios: { [lunes]: { lunes, actualizado: null, turnos: [{ personaId: persona.id, fecha: lunes, tramos: [{ inicio: 600, fin: 870 }] }] } },
+    };
+    await montar(resultado([]), vi.fn(), conHorario, lunes);
+    expect([...raiz.querySelectorAll('th')].some((t) => t.textContent === 'Turno')).toBe(true);
+    expect(raiz.textContent).toContain('4h30');
   });
 });

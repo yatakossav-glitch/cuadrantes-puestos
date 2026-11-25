@@ -95,3 +95,5 @@
 .vista-previa-copiar { border-collapse: collapse; font-size: 12px; }
 .vista-previa-copiar th, .vista-previa-copiar td { padding: 2px 6px; border: 1px solid var(--borde); white-space: nowrap; text-align: left; }
 .vista-previa-copiar th { background: var(--fondo); }
+.cq-aviso-horario { margin: 0 0 8px; padding: 6px 10px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--acento-fondo); }
+.cq-turno { margin: 0 0 4px; font-weight: 600; }

@@ -5,6 +5,8 @@ import { crearEstadoEjemplo } from '../../datos-ejemplo/ejemplo';
 import { conservarAlias } from '../../persistencia/alias';
 import { CLAVE_ILEGIBLE } from '../../arranque';
 import { exportarRespaldo, importarRespaldo } from '../../persistencia/respaldo';
+import type { FechaISO } from '../../modelo/tipos';
+import { HorarioPlantilla } from './HorarioPlantilla';
 import { Confirmacion } from '../componentes/Confirmacion';
 import { IconoCopiar, IconoExportar, IconoImportar } from '../iconos';
 
@@ -39,7 +41,15 @@ function leerClave(clave: string): string | null {
   }
 }
 
-export function Datos({ almacen, textoIlegible }: { almacen: AlmacenApp; textoIlegible?: () => string | null }) {
+export function Datos({
+  almacen,
+  textoIlegible,
+  alIrASemana,
+}: {
+  almacen: AlmacenApp;
+  textoIlegible?: () => string | null;
+  alIrASemana?: (lunes: FechaISO) => void;
+}) {
   const [sinAlias, setSinAlias] = useState(false);
   const [copia, setCopia] = useState('');
   const [msgExportar, setMsgExportar] = useState<Mensaje | null>(null);
@@ -187,6 +197,11 @@ export function Datos({ almacen, textoIlegible }: { almacen: AlmacenApp; textoIl
           <Aviso mensaje={msgIlegible} />
         </section>
       )}
+
+      <section class="tarjeta" aria-labelledby="titulo-horario">
+        <h3 id="titulo-horario">Horario de la plantilla</h3>
+        <HorarioPlantilla almacen={almacen} alIrASemana={alIrASemana ?? (() => {})} />
+      </section>
 
       <section class="tarjeta" aria-labelledby="titulo-exportar">
         <h3 id="titulo-exportar">Exportar</h3>

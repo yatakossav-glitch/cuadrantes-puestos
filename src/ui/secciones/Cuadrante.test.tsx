@@ -310,4 +310,39 @@ describe('Cuadrante', () => {
     expect(document.activeElement?.id).toBe('pv-incumplimientos');
     document.getElementById('pv-incumplimientos')!.remove();
   });
+
+  it('avisa de que la semana no tiene horario y ofrece importarlo', async () => {
+    const almacen = crearAlmacenApp(crearEstadoEjemplo(), { guardar: () => ({ ok: true }) });
+    raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    const importar = vi.fn();
+    await act(() => render(<Cuadrante almacen={almacen} resultado={null} alImportarHorario={importar} />, raiz));
+    const aviso = raiz.querySelector('.cq-aviso-horario')!;
+    expect(aviso.getAttribute('role')).toBe('status');
+    expect(aviso.textContent).toContain('Esta semana no tiene horario de la plantilla');
+    await pulsar(boton('Importar horario'));
+    expect(importar).toHaveBeenCalled();
+  });
+
+  it('con horario muestra el aviso con el número de personas y el turno en Por persona', async () => {
+    const base = crearEstadoEjemplo();
+    const estado = {
+      ...base,
+      horarios: {
+        [LUNES]: {
+          lunes: LUNES,
+          actualizado: null,
+          turnos: [
+            { personaId: 'per-01', fecha: LUNES, tramos: [{ inicio: 600, fin: 945 }] },
+            { personaId: 'per-02', fecha: LUNES, tramos: [] },
+          ],
+        },
+      },
+    };
+    await montar(estado);
+    expect(raiz.querySelector('.cq-aviso-horario')!.textContent).toContain('Horario de la plantilla cargado: 1 persona trabaja esta semana.');
+    await pulsar(pestana('Por persona'));
+    await elegir(raiz.querySelector<HTMLSelectElement>('.cq-persona select')!, 'per-01');
+    expect(raiz.textContent).toContain('Turno: 10:00–15:45');
+  });
 });

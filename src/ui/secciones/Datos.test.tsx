@@ -22,4 +22,12 @@ describe('Datos', () => {
     await act(() => almacen.aplicar('x', (e) => ({ ...e })));
     expect(raiz.querySelector<HTMLTextAreaElement>('textarea[readonly]')!.value).toBe('');
   });
+
+  it('muestra el horario de la plantilla como primera tarjeta', async () => {
+    const almacen = crearAlmacenApp(crearEstadoEjemplo(), { guardar: () => ({ ok: true }) });
+    const raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    await act(() => render(<Datos almacen={almacen} alIrASemana={() => {}} />, raiz));
+    expect(raiz.querySelector('section.tarjeta h3')?.textContent).toBe('Horario de la plantilla');
+  });
 });
