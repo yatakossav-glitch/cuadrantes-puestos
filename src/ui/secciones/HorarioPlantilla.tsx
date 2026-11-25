@@ -322,7 +322,7 @@ export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla
                 class="boton"
                 onClick={() => almacen.aplicar('Crear personas del horario', (e) => crearPersonasDesdeCodigos(e, faltan))}
               >
-                Crear las {faltan.length} {faltan.length === 1 ? 'persona que falta' : 'personas que faltan'}
+                {faltan.length === 1 ? 'Crear la persona que falta' : `Crear las ${faltan.length} personas que faltan`}
               </button>
             </div>
           )}

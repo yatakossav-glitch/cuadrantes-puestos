@@ -76,7 +76,7 @@ describe('HorarioPlantilla', () => {
     const almacen = await montar();
     await pegar('EMP-90\tL\tL\tL\tL\tL\tL\tL');
     expect(raiz.textContent).toContain('no existe');
-    await act(() => boton('Crear las 1 persona que falta').click());
+    await act(() => boton('Crear la persona que falta').click());
     expect(almacen.obtener().personas.some((p) => p.codigo === 'EMP-90')).toBe(true);
     expect(raiz.textContent).not.toContain('no existe');
   });
