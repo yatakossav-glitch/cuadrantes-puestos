@@ -588,3 +588,78 @@ disposición (si es por área), casilla «Exportar sin alias» (marcada por defe
   «Completar huecos»). Lista filtrable (en curso y próximas / pasadas / todas; búsqueda por código o puesto) con momento en texto.
 - **Móvil:** ancho mínimo útil 360 px: pestañas con desplazamiento horizontal, rejilla del cuadrante con desplazamiento dentro de su caja,
   fichas en una columna, botones de al menos 40 px de alto.
+
+## 13. Horario semanal de la plantilla (importado)
+
+La semana anterior le pasan a la usuaria el horario de cada persona (quién trabaja de mañana o de tarde, qué días, cuántas horas, domingos…).
+Con él se hace el cuadrante: **el horario dice quién está y cuándo; el cuadrante reparte a esas personas entre los puestos.**
+Modelo (contrato, esquema v3): `DatosPlanificacion.horarios: Record<lunes, HorarioSemana>`, `HorarioSemana { lunes, turnos: TurnoDia[], actualizado }`,
+`TurnoDia { personaId, fecha, tramos: Intervalo[] }` (tramos vacío = libra; varios tramos = turno partido).
+
+Semántica: si la semana tiene horario, cada persona solo está disponible dentro de los tramos de su turno de ese día; quien no figura
+no trabaja esa semana. Sin horario para la semana, no hay limitación. Se aplica en `personaDisponible` (evaluar y comprobar),
+así que el validador, el motor, las sugerencias y el modo «semana tipo» lo respetan sin más cambios. No se inventan reglas
+nuevas (p. ej. «hay que ocupar todo su turno»): eso queda pendiente de que la usuaria lo confirme.
+
+### 13.1 Lectura del horario pegado desde Excel · `src/importar/horario.ts` (puro)
+
+```ts
+export interface TurnoConLetra { letra: string; nombre: string; tramos: Intervalo[] }   // 'M' Mañana 10:00–15:45; 'T' Tarde 15:45–22:00
+export function letrasPorDefecto(datos: DatosPlanificacion): TurnoConLetra[]
+    // M: [primer inicio de franja de los puestos activos → corte), T: [corte → último fin); si no hay puestos, 10:00 / corte / 22:00
+export interface CeldaLeida { texto: string; tramos: Intervalo[]; libre: boolean; error: string | null }
+export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): CeldaLeida
+    // '' · 'L' · 'libre' · 'descanso' · 'D' · 'fiesta' · 'vacaciones' · 'vac' · 'baja' · '-' · '—' → libre (no se guarda el motivo)
+    // '10:00-15:45' · '10-15:45' · '10.00 a 15.45' · '10:00–15:45' · '10h-15:45h' → un tramo; 'a', '-', '–', '—' como separador
+    // '10:00-14:00 / 17:00-21:00' · '10-14 y 17-21' · '10-14, 17-21' → partido (ordenado, sin solapes)
+    // letra o nombre del turno sin distinguir mayúsculas ni tildes: 'M', 'mañana', 'T', 'Tarde'; 'M+T' o 'M/T' → unión
+    // cualquier otra cosa → error legible «No entiendo "xx": escribe un horario como 10:00-15:45, M, T o L»
+    // tramo con fin ≤ inicio o fuera de 00:00–24:00 → error
+export interface FilaLeida { linea: number; codigo: string; personaId: Id | null; dias: (CeldaLeida | null)[] }  // 7 posiciones, lunes…domingo; null = esa columna no venía
+export interface LecturaHorario {
+  lunes: FechaISO; filas: FilaLeida[];
+  columnas: string;                     // descripción de lo detectado: «Código en la columna 1; lunes a domingo en las columnas 2 a 8»
+  errores: string[];                    // bloquean guardar: sin columna de códigos, sin días, celdas no entendidas (con persona y día)
+  avisos: string[];                     // no bloquean: códigos que no existen, códigos repetidos (gana la última fila), personas activas que no figuran
+  codigosDesconocidos: string[];
+}
+export function leerHorario(texto: string, lunes: FechaISO, datos: DatosPlanificacion, letras: readonly TurnoConLetra[]): LecturaHorario
+    // separador: tabulador (Excel); si no hay, ';' o ','. Filas vacías fuera.
+    // Cabecera: la fila con 2+ celdas que sean días (lun, lunes, L…D no: ambiguo; 'lu','ma','mi','ju','vi','sa','do' sí) o fechas dd/mm[/aaaa] de esa semana;
+    //   las columnas de día se asignan por nombre o por fecha. Sin cabecera: las 7 columnas siguientes a la del código son lunes…domingo.
+    // Columna de código: la que más celdas tenga que coincidan con un código existente tras normalizarCodigo (persistencia/coherencia.ts);
+    //   si ninguna coincide, la primera columna con aspecto de código (letras+número).
+    // Filas cuyo código no existe: personaId null y su código en codigosDesconocidos (se pueden crear).
+```
+
+### 13.2 Edición pura · `src/edicion/horarios.ts`
+
+```ts
+export function turnoDe(datos: DatosPlanificacion, personaId: Id, fecha: FechaISO): Intervalo[] | null   // null = la semana no tiene horario
+export function enTurno(datos: DatosPlanificacion, personaId: Id, fecha: FechaISO, iv: Intervalo): boolean  // true si no hay horario o iv cabe entero en un tramo
+export function horarioDesdeLectura(lectura: LecturaHorario, ahora?: string): HorarioSemana   // solo filas con personaId; días null → libra
+export function impactoGuardarHorario(estado: EstadoApp, horario: HorarioSemana): Impacto
+    // bloqueos: ninguno; efectos: «Reemplazará el horario de la semana del 30 nov», «12 asignaciones ya hechas quedan fuera de turno
+    // (EMP-07 martes…): puedes recubrirlas desde el Cuadrante», «3 personas activas no figuran y no trabajarán esa semana»
+export function guardarHorario(estado: EstadoApp, horario: HorarioSemana): EstadoApp
+export function quitarHorario(estado: EstadoApp, lunes: FechaISO): EstadoApp
+export function cambiarTurno(estado: EstadoApp, lunes: FechaISO, personaId: Id, fecha: FechaISO, tramos: Intervalo[]): EstadoApp
+export function crearPersonasDesdeCodigos(estado: EstadoApp, codigos: readonly string[], ids?: () => Id): EstadoApp  // como crearPersona, con ese código, sin habilitaciones
+export function minutosDeTurno(horario: HorarioSemana, personaId: Id): Minutos
+export function describirTurno(tramos: Intervalo[] | null): string   // 'Libra' · '10:00–15:45' · '10:00–14:00 y 17:00–21:00' · 'Sin horario'
+```
+
+`personaDisponible`: «EMP-07 no está de turno a esa hora el martes 01/12 (su turno: 10:00–15:45)», «EMP-07 libra el martes 01/12 según el horario
+de la semana», «EMP-07 no figura en el horario de la semana». `edicion/cuadrante.motivoNoDisponible`: 'fuera de su turno' / 'libra según el horario'.
+`borrarPersona` quita también sus turnos. `comprobarCoherencia` avisa de turnos de personas inexistentes o con fecha fuera de su semana.
+
+### 13.3 Interfaz
+
+- **Datos → «Horario de la plantilla»**: semana (por defecto la siguiente), cuadro «Pega aquí el horario copiado de Excel», turnos por letra
+  editables (M, T y los que añada), «Leer horario», vista previa persona × día con el texto entendido («10:00–15:45», «Libra», error en rojo
+  con texto), errores y avisos, «Crear las N personas que faltan», «Guardar horario de la semana» (con impacto) y, tras guardar,
+  «Ir a la semana» (abre el Cuadrante). Lista de semanas con horario: personas, horas totales, «Ver y editar» (rejilla editable celda a celda
+  con `leerCelda`) y «Quitar».
+- **Cuadrante**: aviso bajo la barra de semana: «Horario de la plantilla cargado (27 personas)» o «Esta semana no tiene horario de la
+  plantilla: se puede asignar a cualquiera a cualquier hora» con botón «Importar horario». En la vista Por persona, el turno de cada día.
+- **Resumen por persona**: horas de turno junto a las horas asignadas, si hay horario.
