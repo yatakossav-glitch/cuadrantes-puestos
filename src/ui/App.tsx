@@ -67,6 +67,7 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
   const [seccion, setSeccion] = useState<IdSeccion>('cuadrante');
   const [lunes, setLunes] = useState<FechaISO>(() => lunesDe(hoyISO()));
   const [foco, setFoco] = useState<{ asignacionId?: Id; hueco?: ClaveHueco; nonce: number } | null>(null);
+  const [peticionHorario, setPeticionHorario] = useState<{ lunes: FechaISO; nonce: number } | null>(null);
   const [peticion, setPeticion] = useState<{ lunes: FechaISO; recubrir: boolean; nonce: number } | null>(null);
   function irASemana(destino: FechaISO, recubrir: boolean) {
     setPeticion({ lunes: destino, recubrir, nonce: Date.now() });
@@ -228,7 +229,10 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
           >
             {s.id === 'cuadrante' ? (
               <div>
-                <Cuadrante almacen={almacen} resultado={validacion.resultado} foco={foco} alCambiarSemana={setLunes} peticion={peticion} alImportarHorario={() => setSeccion('datos')} />
+                <Cuadrante almacen={almacen} resultado={validacion.resultado} foco={foco} alCambiarSemana={setLunes} peticion={peticion} alImportarHorario={(l) => {
+                  setPeticionHorario({ lunes: l, nonce: Date.now() });
+                  setSeccion('datos');
+                }} />
                 <PanelValidacion
                   resultado={validacion.resultado}
                   resumen={validacion.resumen}
@@ -238,7 +242,7 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
                 />
               </div>
             ) : s.id === 'datos' ? (
-              <Datos almacen={almacen} textoIlegible={textoIlegible} alIrASemana={(l) => irASemana(l, false)} />
+              <Datos almacen={almacen} textoIlegible={textoIlegible} alIrASemana={(l) => irASemana(l, false)} peticionHorario={peticionHorario} />
             ) : s.id === 'personas' ? (
               <Personas almacen={almacen} />
             ) : s.id === 'puestos' ? (

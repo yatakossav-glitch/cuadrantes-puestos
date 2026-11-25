@@ -1,6 +1,6 @@
 import type { DatosPlanificacion, ReglaGeneral } from '../../modelo/tipos';
 import type { Asignacion } from '../../modelo/tipos';
-import { describirTurno, enTurno, figuraEnHorario, turnoDe } from '../../edicion/horarios';
+import { describirTurno, enTurno, figuraEnHorario, semanaConHorario, turnoDe } from '../../edicion/horarios';
 import { NOMBRES_DIA, diaSemana } from '../../modelo/fechas';
 import { semanaDelCiclo } from '../../rotacion/ciclo';
 import type { ContextoEvaluacion, DefinicionReglaGeneral, IndiceSemana, Incumplimiento } from '../contrato';
@@ -30,9 +30,10 @@ function motivoNoDisponible(a: Asignacion, indice: IndiceSemana, datos: DatosPla
   }
   if (iv && indice.ausente(persona.id, a.fecha, iv)) return 'está ausente';
   const dia = diaSemana(a.fecha);
+  // Si la semana tiene horario de la plantilla, ese es el real: no se aplican los días libres del patrón.
   const semana = semanaDelCiclo(rotacion, indice.lunes);
   const paso = persona.patron.find((p) => p.indiceCiclo === semana.indice);
-  if (paso?.diasLibres.includes(dia)) return `libra el ${NOMBRES_DIA[dia]} en la semana ${semana.etiqueta}`;
+  if (!semanaConHorario(datos, a.fecha) && paso?.diasLibres.includes(dia)) return `libra el ${NOMBRES_DIA[dia]} en la semana ${semana.etiqueta}`;
   // Horario semanal de la plantilla (si la semana lo tiene). Las pausas no se marcan por horario.
   if (iv && a.tipo === 'puesto') {
     const tramos = turnoDe(datos, persona.id, a.fecha);

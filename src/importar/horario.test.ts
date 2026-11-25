@@ -117,7 +117,7 @@ describe('leerHorario · formatos de tabla', () => {
 
   it('cabecera con fechas de otra semana da error', () => {
     const l = leerHorario(['x\t23/11\t24/11\t25/11\t26/11\t27/11\t28/11\t29/11', 'EMP-06\tM\tM\tM\tM\tM\tL\tL'].join('\n'), LUNES, datos, letras);
-    expect(l.errores[0]).toContain('no son de la semana del 30/11/2026');
+    expect(l.errores[0]).toBe('La cabecera es de la semana del 23/11, no de la del 30/11. Cambia la semana o revisa lo pegado.');
   });
 
   it('cabecera con días en otro orden o incompletos asigna por nombre', () => {
@@ -214,5 +214,55 @@ describe('leerHorario · formatos de tabla', () => {
     expect(leerHorario('  \n', LUNES, datos, letras).errores[0]).toContain('No hay nada que leer');
     expect(leerHorario('hola\nadiós', LUNES, datos, letras).errores[0]).toContain('columna con los códigos');
     expect(leerHorario('EMP-01', LUNES, datos, letras).errores[0]).toContain('columnas de los días');
+  });
+});
+
+describe('leerHorario · hallazgos de la revisión', () => {
+  const dia = (l: ReturnType<typeof leerHorario>, codigo: string, i: number) => l.filas.find((f) => f.codigo === codigo)?.dias[i];
+  it('sin cabecera, una primera fila con horas no se toma por cabecera de fechas', () => {
+    const l = leerHorario('EMP-07\t10:00-15:45\t10-14\t15:45-22:00\tM\tT\tL\tL\nEMP-01\tM\tM\tM\tM\tM\tL\tL', LUNES, datos, letras);
+    expect(l.errores).toEqual([]);
+    expect(l.filas).toHaveLength(2);
+    expect(dia(l, 'EMP-07', 0)?.tramos).toEqual(M);
+  });
+
+  it('cabecera con nombre de día y fecha de otra semana: error bloqueante', () => {
+    const l = leerHorario(['Código\tLunes 23/11\tMartes 24/11\tMiércoles 25/11', 'EMP-01\tM\tM\tM'].join('\n'), LUNES, datos, letras);
+    expect(l.errores[0]).toBe('La cabecera es de la semana del 23/11, no de la del 30/11. Cambia la semana o revisa lo pegado.');
+  });
+
+  it('cabecera con nombre de día y fecha de la semana correcta', () => {
+    const l = leerHorario(['Código\tLunes 30/11\tMartes 01/12', 'EMP-01\tM\tT'].join('\n'), LUNES, datos, letras);
+    expect(l.errores).toEqual([]);
+    expect(dia(l, 'EMP-01', 1)?.tramos).toEqual(T);
+  });
+
+  it('ninguna persona conocida: error bloqueante', () => {
+    const l = leerHorario('EMP-90\tL\tL\tL\tL\tL\tL\tL', LUNES, datos, letras);
+    expect(l.errores).toContain('No se ha reconocido ningún código de la plantilla (EMP-…). Revisa la columna de códigos o crea las personas.');
+    expect(l.codigosDesconocidos).toEqual(['EMP-90']);
+  });
+
+  it('celda con salto de línea entre comillas: separa tramos y respeta "" y las filas', () => {
+    const texto = 'EMP-01\t"10:00-14:00\n17:00-21:00"\tM\tM\tM\tM\tL\tL\nEMP-02\t"M"\tT\tT\tT\tT\tL\tL';
+    const l = leerHorario(texto, LUNES, datos, letras);
+    expect(l.errores).toEqual([]);
+    expect(l.filas).toHaveLength(2);
+    expect(dia(l, 'EMP-01', 0)?.tramos).toHaveLength(2);
+    expect(l.filas[1]?.linea).toBe(2);
+    expect(dia(l, 'EMP-02', 0)?.tramos).toEqual(M);
+  });
+
+  it('comilla literal ("") dentro de una celda entrecomillada', () => {
+    const l = leerHorario('EMP-01\t"x""y"\tM\tM\tM\tM\tL\tL', LUNES, datos, letras);
+    expect(l.filas[0]?.dias[0]?.texto).toBe('x"y');
+  });
+
+  it.each(['V', 'Vac.', 'Baja médica', 'baja', 'Permiso', 'Libranza', 'Descanso semanal', 'Vacaciones pagadas'])('«%s» es libre sin guardar el texto', (s) => {
+    expect(leerCelda(s, letras)).toMatchObject({ libre: true, tramos: [], error: null });
+  });
+
+  it('acepta horas con segundos', () => {
+    expect(leerCelda('10:00:00-15:45:00', letras).tramos).toEqual(M);
   });
 });

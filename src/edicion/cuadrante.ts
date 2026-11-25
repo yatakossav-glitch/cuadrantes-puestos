@@ -19,7 +19,7 @@ import type {
   Rotacion,
 } from '../modelo/tipos';
 import { horarioDe } from './horario';
-import { enTurno, turnoDe } from './horarios';
+import { enTurno, semanaConHorario, turnoDe } from './horarios';
 
 export interface HuecoEditable {
   fecha: FechaISO;
@@ -213,7 +213,8 @@ export function motivoNoDisponible(
   });
   if (ausente) return 'ausente';
   const semana = semanaDelCiclo(estado.rotacion, lunes);
-  if (persona.patron.some((p) => p.indiceCiclo === semana.indice && p.diasLibres.includes(diaSemana(fecha)))) {
+  // Con horario de la plantilla en la semana, manda el horario: no se aplican los días libres del patrón.
+  if (!semanaConHorario(estado, fecha) && persona.patron.some((p) => p.indiceCiclo === semana.indice && p.diasLibres.includes(diaSemana(fecha)))) {
     return 'libra ese día (rotación)';
   }
   if (puesto.requiereHabilitacion && !persona.habilitaciones.includes(puesto.id) && !persona.habilitaciones.includes(puesto.areaId)) {

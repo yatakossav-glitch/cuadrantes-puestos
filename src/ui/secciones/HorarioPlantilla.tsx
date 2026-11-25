@@ -1,5 +1,5 @@
 /** Horario semanal de la plantilla (ARQUITECTURA §13.3): pegar desde Excel, vista previa, guardar y editar. */
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
   cambiarTurno,
   crearPersonasDesdeCodigos,
@@ -25,6 +25,8 @@ import './HorarioPlantilla.css';
 export interface PropsHorarioPlantilla {
   almacen: AlmacenApp;
   alIrASemana: (lunes: FechaISO) => void;
+  /** Petición desde el Cuadrante: poner esta semana (la que se estaba viendo). */
+  peticion?: { lunes: FechaISO; nonce: number } | null;
 }
 
 const sumaMinutos = (tramos: readonly Intervalo[]) => tramos.reduce((s, t) => s + duracion(t), 0);
@@ -98,18 +100,33 @@ function EditorLetras({ letras, alCambiar }: { letras: TurnoConLetra[]; alCambia
 
 // ───────────────────────── Rejilla de edición ─────────────────────────
 
+/** Identifica cada objeto de horario guardado: si cambia (guardar, deshacer, rehacer), la rejilla se reinicia. */
+const versiones = new WeakMap<HorarioSemana, number>();
+let siguienteVersion = 0;
+function versionDe(h: HorarioSemana): number {
+  let v = versiones.get(h);
+  if (v === undefined) {
+    siguienteVersion += 1;
+    v = siguienteVersion;
+    versiones.set(h, v);
+  }
+  return v;
+}
+
 function textoInicial(tramos: readonly Intervalo[]): string {
   return tramos.length === 0 ? 'L' : describirTurno([...tramos]);
 }
 
 function EditorSemana({
-  almacen, estado, horario, letras, alTerminar,
+  almacen, estado, horario, letras, alTerminar, alCambiarPendiente,
 }: {
   almacen: AlmacenApp;
   estado: EstadoApp;
   horario: HorarioSemana;
   letras: TurnoConLetra[];
   alTerminar: (mensaje: string | null) => void;
+  /** Avisa al padre de si hay cambios sin guardar en la rejilla. */
+  alCambiarPendiente: (hay: boolean) => void;
 }) {
   const fechas = fechasSemana(horario.lunes);
   const personas = [...new Set(horario.turnos.map((t) => t.personaId))].sort((a, b) => porCodigo(estado, a, b));
@@ -125,15 +142,21 @@ function EditorSemana({
     return r;
   }, [textos, letras]);
   const cambios = Object.keys(textos).filter((k) => textos[k] !== textoInicial(original(...(k.split('|') as [Id, FechaISO]))?.tramos ?? []));
+  const hayCambios = cambios.length > 0;
+  useEffect(() => {
+    alCambiarPendiente(hayCambios);
+    return () => alCambiarPendiente(false);
+  }, [hayCambios]);
   const hayError = Object.values(leidas).some((c) => c.error !== null);
 
   function guardar() {
+    const ahora = new Date().toISOString();
     almacen.aplicar(`Editar el horario de la semana del ${formatearFecha(horario.lunes)}`, (e) => {
       let r = e;
       for (const k of cambios) {
         const [p, f] = k.split('|') as [Id, FechaISO];
         const c = leidas[k];
-        if (c && c.error === null) r = cambiarTurno(r, horario.lunes, p, f, c.libre ? [] : c.tramos);
+        if (c && c.error === null) r = cambiarTurno(r, horario.lunes, p, f, c.libre ? [] : c.tramos, ahora);
       }
       return r;
     });
@@ -205,7 +228,7 @@ function EditorSemana({
 
 // ───────────────────────── Componente principal ─────────────────────────
 
-export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla) {
+export function HorarioPlantilla({ almacen, alIrASemana, peticion = null }: PropsHorarioPlantilla) {
   const estado = usarAlmacen(almacen);
   const [lunes, setLunes] = useState<FechaISO>(() => sumarDias(lunesDe(hoyISO()), 7));
   const [texto, setTexto] = useState('');
@@ -216,6 +239,17 @@ export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla
   const [editando, setEditando] = useState<FechaISO | null>(null);
   const [quitando, setQuitando] = useState<FechaISO | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [pendiente, setPendiente] = useState(false);
+  const [cambiandoEdicion, setCambiandoEdicion] = useState<FechaISO | null>(null);
+  const nonceAtendido = useRef<number | null>(null);
+  useEffect(() => {
+    if (!peticion || peticion.nonce === nonceAtendido.current) return;
+    nonceAtendido.current = peticion.nonce;
+    setLunes(lunesDe(peticion.lunes));
+    setLeido(null);
+    setConfirmando(false);
+    setGuardado(null);
+  }, [peticion]);
 
   const lectura = useMemo(
     () => (leido ? leerHorario(leido.texto, leido.lunes, estado, leido.letras) : null),
@@ -227,6 +261,14 @@ export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla
     setLunes(destino);
     setLeido(null);
     setConfirmando(false);
+  }
+
+  /** Cierra la rejilla abierta o abre la de la semana `s` (sin preguntar: la confirmación va antes). */
+  function cambiarEdicion(s: FechaISO) {
+    setEditando(editando === s ? null : s);
+    setCambiandoEdicion(null);
+    setPendiente(false);
+    setMensaje(null);
   }
 
   function guardar() {
@@ -412,17 +454,27 @@ export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla
                       aria-expanded={editando === s}
                       aria-label={`${editando === s ? 'Cerrar' : 'Ver y editar'} el horario de la semana del ${formatearFecha(s)}`}
                       onClick={() => {
-                        setEditando(editando === s ? null : s);
-                        setMensaje(null);
+                        if (editando !== null && pendiente) setCambiandoEdicion(s);
+                        else cambiarEdicion(s);
                       }}
                     >
-                      Ver y editar
+                      {editando === s ? 'Cerrar' : 'Ver y editar'}
                     </button>
                     <button type="button" class="boton peligro" aria-label={`Quitar el horario de la semana del ${formatearFecha(s)}`} onClick={() => setQuitando(s)}>
                       Quitar
                     </button>
                   </span>
                 </div>
+                {cambiandoEdicion === s && (
+                  <Confirmacion
+                    id={`hp-conf-descartar-${s}`}
+                    titulo="Cambios sin guardar"
+                    texto="Hay cambios sin guardar en la rejilla del horario. Si continúas, se descartarán."
+                    textoConfirmar="Sí, descartar cambios"
+                    alConfirmar={() => cambiarEdicion(s)}
+                    alCancelar={() => setCambiandoEdicion(null)}
+                  />
+                )}
                 {quitando === s && (
                   <Confirmacion
                     id={`hp-conf-quitar-${s}`}
@@ -439,13 +491,15 @@ export function HorarioPlantilla({ almacen, alIrASemana }: PropsHorarioPlantilla
                 )}
                 {editando === s && (
                   <EditorSemana
-                    key={`${s}-${h.actualizado ?? ''}`}
+                    key={`${s}-${versionDe(h)}`}
                     almacen={almacen}
                     estado={estado}
                     horario={h}
                     letras={letras}
+                    alCambiarPendiente={setPendiente}
                     alTerminar={(m) => {
                       setEditando(null);
+                      setPendiente(false);
                       setMensaje(m);
                     }}
                   />

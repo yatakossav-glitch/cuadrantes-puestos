@@ -2,7 +2,7 @@
  * Lectura del horario semanal pegado desde Excel (§13.1). Funciones puras: texto → lectura.
  * No modifica datos; `edicion/horarios.ts` convierte la lectura en un `HorarioSemana`.
  */
-import { NOMBRES_DIA, esFechaISO, sumarDias } from '../modelo/fechas';
+import { NOMBRES_DIA, esFechaISO, lunesDe, sumarDias } from '../modelo/fechas';
 import { aHora } from '../modelo/horas';
 import type { DatosPlanificacion, FechaISO, Id, Intervalo } from '../modelo/tipos';
 import { normalizarCodigo } from '../persistencia/coherencia';
@@ -89,10 +89,13 @@ export function letrasPorDefecto(datos: DatosPlanificacion): TurnoConLetra[] {
 // ───────────────────────── Celdas ─────────────────────────
 
 const PALABRAS_LIBRE = new Set([
-  '', 'l', 'libre', 'libra', 'descanso', 'd', 'fiesta', 'festivo', 'vacaciones', 'vac', 'baja', 'permiso', '-', '—', '–',
+  '', 'l', 'v', 'libre', 'libra', 'libranza', 'descanso', 'descanso semanal', 'd', 'fiesta', 'festivo', 'permiso', '-', '—', '–',
 ]);
 
-const HORA = String.raw`(\d{1,2})(?:[:.h](\d{2}))?h?`;
+/** Cualquier texto que empiece por «baja» o «vac» (Baja médica, Vac., Vacaciones…) cuenta como libre. */
+const PATRON_LIBRE_PREFIJO = /^(baja|vac)/;
+
+const HORA = String.raw`(\d{1,2})(?:[:.h](\d{2})(?:[:.]\d{2})?)?h?`;
 const PATRON_TRAMO = new RegExp(String.raw`^${HORA}\s*(?:[-–—]|a|hasta)\s*${HORA}$`);
 
 function aMin(h: string | undefined, m: string | undefined): number | null {
@@ -137,7 +140,7 @@ export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): Celd
     porLetra.set(normalizarTexto(l.nombre), l);
   }
 
-  if (!porLetra.has(norm) && PALABRAS_LIBRE.has(norm)) return celda(original, [], true, null);
+  if (!porLetra.has(norm) && (PALABRAS_LIBRE.has(norm) || PATRON_LIBRE_PREFIJO.test(norm))) return celda(original, [], true, null);
 
   const partes = norm.split(/\s*[/+,;]\s*|\s+y\s+/).filter((p) => p !== '');
   const tramos: Intervalo[] = [];
@@ -177,37 +180,132 @@ const DIAS_POR_NOMBRE: Record<string, number> = {
   do: 6, dom: 6, domingo: 6,
 };
 
-const PATRON_FECHA_CABECERA = /(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/;
-const PATRON_FECHA_ISO = /(\d{4})-(\d{2})-(\d{2})/;
+const PATRON_FECHA_ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** Una celda de cabecera con fecha: solo la fecha, opcionalmente precedida del nombre del día. */
+const PATRON_CABECERA_FECHA = /^(?:([a-z]+)\.?[\s,]*)?(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/;
+const PATRON_CABECERA_NOMBRE = /^([a-z]+)\.?$/;
 
-/** Fecha escrita en una celda de cabecera, como [año|null, mes, día]. */
-function fechaDeCelda(texto: string): { anio: number | null; mes: number; dia: number } | null {
-  const iso = PATRON_FECHA_ISO.exec(texto);
-  if (iso) return { anio: Number(iso[1]), mes: Number(iso[2]), dia: Number(iso[3]) };
-  const m = PATRON_FECHA_CABECERA.exec(texto);
-  if (!m) return null;
-  let anio: number | null = m[3] === undefined ? null : Number(m[3]);
-  if (anio !== null && anio < 100) anio += 2000;
-  return { anio, mes: Number(m[2]), dia: Number(m[1]) };
+interface CabeceraCelda {
+  /** Día de la semana (0–6) al que corresponde la columna, si es de esta semana. */
+  dia: number | null;
+  /** Si la celda trae una fecha de otra semana: el lunes de esa semana. */
+  otraSemana: FechaISO | null;
 }
 
-/** Día de la semana (0–6) que representa una celda de cabecera, o null. */
-function diaDeCabecera(texto: string, fechas: readonly FechaISO[]): number | null {
-  const palabra = /^[a-z]+/.exec(normalizarTexto(texto))?.[0];
-  if (palabra !== undefined && palabra in DIAS_POR_NOMBRE) return DIAS_POR_NOMBRE[palabra] ?? null;
-  const f = fechaDeCelda(texto);
-  if (!f) return null;
+const SIN_CABECERA: CabeceraCelda = { dia: null, otraSemana: null };
+
+function lunesDeFechaSinAnio(dia: number, mes: number, referencia: FechaISO): FechaISO | null {
+  const anioRef = Number(referencia.slice(0, 4));
+  let mejor: FechaISO | null = null;
+  let distancia = Infinity;
+  for (const anio of [anioRef - 1, anioRef, anioRef + 1]) {
+    const f = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    if (!esFechaISO(f)) continue;
+    const d = Math.abs(Date.parse(f) - Date.parse(referencia));
+    if (d < distancia) {
+      distancia = d;
+      mejor = f;
+    }
+  }
+  return mejor === null ? null : lunesDe(mejor);
+}
+
+/** Interpreta una celda de cabecera: nombre de día, fecha o «nombre fecha»; cualquier otra cosa no cuenta. */
+function leerCabeceraCelda(texto: string, fechas: readonly FechaISO[], lunes: FechaISO): CabeceraCelda {
+  const norm = normalizarTexto(texto);
+  if (norm === '' || PATRON_TRAMO.test(norm)) return SIN_CABECERA;
+  const solo = PATRON_CABECERA_NOMBRE.exec(norm);
+  if (solo) {
+    const d = DIAS_POR_NOMBRE[solo[1] ?? ''];
+    return d === undefined ? SIN_CABECERA : { dia: d, otraSemana: null };
+  }
+  let anio: number | null;
+  let mes: number;
+  let dia: number;
+  let nombre: string | undefined;
+  const iso = PATRON_FECHA_ISO.exec(norm);
+  if (iso) {
+    anio = Number(iso[1]);
+    mes = Number(iso[2]);
+    dia = Number(iso[3]);
+  } else {
+    const m = PATRON_CABECERA_FECHA.exec(norm);
+    if (!m) return SIN_CABECERA;
+    nombre = m[1];
+    if (nombre !== undefined && !(nombre in DIAS_POR_NOMBRE)) return SIN_CABECERA;
+    dia = Number(m[2]);
+    mes = Number(m[3]);
+    anio = m[4] === undefined ? null : Number(m[4]);
+    if (anio !== null && anio < 100) anio += 2000;
+  }
   const i = fechas.findIndex((x) => {
-    const [a, m, d] = x.split('-').map(Number);
-    return d === f.dia && m === f.mes && (f.anio === null || a === f.anio);
+    const [a, mm, d] = x.split('-').map(Number);
+    return d === dia && mm === mes && (anio === null || a === anio);
   });
-  return i >= 0 ? i : null;
+  if (i >= 0) return { dia: i, otraSemana: null };
+  const fecha = anio === null ? null : `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  const otra = fecha !== null ? (esFechaISO(fecha) ? lunesDe(fecha) : null) : lunesDeFechaSinAnio(dia, mes, lunes);
+  return { dia: null, otraSemana: otra };
+}
+
+/** Parte el texto en líneas respetando las comillas de Excel (una celda entrecomillada puede contener saltos). */
+function partirLineas(texto: string): string[] {
+  const lineas: string[] = [];
+  let actual = '';
+  let dentro = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i] ?? '';
+    if (c === '"') dentro = !dentro;
+    if (!dentro && (c === '\n' || c === '\r')) {
+      if (c === '\r' && texto[i + 1] === '\n') i += 1;
+      lineas.push(actual);
+      actual = '';
+    } else actual += c;
+  }
+  lineas.push(actual);
+  // Comillas sin cerrar: no se puede fiar de ellas, se parte por saltos simples.
+  return dentro ? texto.split(/\r?\n/) : lineas;
+}
+
+const SALTO_INTERNO = /\s*[\r\n]+\s*/g;
+
+/** Separa una línea por `separador` al estilo TSV de Excel: «"..."» agrupa y «""» es una comilla literal. */
+function separarConComillas(linea: string, separador: string): string[] {
+  const celdas: string[] = [];
+  let actual = '';
+  let entrecomillada = false;
+  let dentro = false;
+  const cerrar = () => {
+    celdas.push((entrecomillada ? actual : actual.trim()).replace(SALTO_INTERNO, ' / ').trim());
+    actual = '';
+    entrecomillada = false;
+  };
+  for (let i = 0; i < linea.length; i++) {
+    const c = linea[i] ?? '';
+    if (dentro) {
+      if (c === '"') {
+        if (linea[i + 1] === '"') {
+          actual += '"';
+          i += 1;
+        } else dentro = false;
+      } else actual += c;
+    } else if (c === '"' && actual.trim() === '') {
+      dentro = true;
+      entrecomillada = true;
+      actual = '';
+    } else if (linea.startsWith(separador, i)) {
+      cerrar();
+      i += separador.length - 1;
+    } else actual += c;
+  }
+  cerrar();
+  return celdas;
 }
 
 function separarLinea(linea: string, separador: string | null): string[] {
-  if (separador !== null) return linea.split(separador).map((c) => c.trim().replace(/^"(.*)"$/s, '$1').trim());
+  if (separador !== null) return separarConComillas(linea, separador);
   // Sin separador claro: por espacios, pero 'emp 7' se mantiene junto.
-  const trozos = linea.trim().split(/\s+/);
+  const trozos = linea.replace(/"/g, '').trim().split(/\s+/);
   const celdas: string[] = [];
   for (let i = 0; i < trozos.length; i++) {
     const t = trozos[i] ?? '';
@@ -257,7 +355,7 @@ export function leerHorario(
 
   // Líneas no vacías con su número original.
   const lineas: { linea: number; texto: string }[] = [];
-  texto.split(/\r?\n/).forEach((t, i) => {
+  partirLineas(texto).forEach((t, i) => {
     if (t.replace(/[\t;,\s]/g, '') !== '') lineas.push({ linea: i + 1, texto: t });
   });
   if (lineas.length === 0) {
@@ -267,20 +365,23 @@ export function leerHorario(
   const separador = elegirSeparador(lineas.map((l) => l.texto));
   const tabla = lineas.map((l) => ({ linea: l.linea, celdas: separarLinea(l.texto, separador) }));
 
-  // Cabecera: entre las primeras filas, la que tenga 2+ celdas con día o fecha de la semana.
+  // Cabecera: entre las primeras filas, la que tenga 2+ celdas con día o fecha. Si esas fechas son de otra semana, error.
   let indiceCabecera = -1;
   const columnasDia: (number | null)[] = [null, null, null, null, null, null, null];
   for (let i = 0; i < Math.min(tabla.length, 5) && indiceCabecera < 0; i++) {
-    const celdas = tabla[i]!.celdas;
-    const dias = celdas.map((c) => diaDeCabecera(c, fechas));
-    if (dias.filter((d) => d !== null).length >= 2) {
-      indiceCabecera = i;
-      dias.forEach((d, col) => {
-        if (d !== null && columnasDia[d] === null) columnasDia[d] = col;
-      });
-    } else if (celdas.filter((c) => fechaDeCelda(c) !== null && /\d{1,2}[/.-]\d{1,2}/.test(c)).length >= 2) {
-      lectura.errores.push(`Las fechas de la cabecera no son de la semana del ${fechas[0]?.split('-').reverse().join('/') ?? lunes}`);
+    const celdas = tabla[i]!.celdas.map((c) => leerCabeceraCelda(c, fechas, lunes));
+    const otra = celdas.find((c) => c.otraSemana !== null)?.otraSemana ?? null;
+    const dias = celdas.filter((c) => c.dia !== null).length;
+    if (otra !== null && dias + celdas.filter((c) => c.otraSemana !== null).length >= 2) {
+      const corto = (f: FechaISO) => f.split('-').reverse().slice(0, 2).join('/');
+      lectura.errores.push(`La cabecera es de la semana del ${corto(otra)}, no de la del ${corto(lunes)}. Cambia la semana o revisa lo pegado.`);
       return lectura;
+    }
+    if (dias >= 2) {
+      indiceCabecera = i;
+      celdas.forEach((c, col) => {
+        if (c.dia !== null && columnasDia[c.dia] === null) columnasDia[c.dia] = col;
+      });
     }
   }
   const hayCabecera = indiceCabecera >= 0;
@@ -346,6 +447,9 @@ export function leerHorario(
   if (lectura.filas.length === 0) {
     lectura.errores.push('No hay ninguna fila con el código de una persona');
     return lectura;
+  }
+  if (!lectura.filas.some((f) => f.personaId !== null)) {
+    lectura.errores.push('No se ha reconocido ningún código de la plantilla (EMP-…). Revisa la columna de códigos o crea las personas.');
   }
 
   for (const [clave, lineasRepetidas] of vistos) {

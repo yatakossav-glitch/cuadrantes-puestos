@@ -108,4 +108,76 @@ describe('HorarioPlantilla', () => {
     await act(() => boton('Sí, quitar horario').click());
     expect(almacen.obtener().horarios).toEqual({});
   });
+
+  it('sin ningún código conocido: error bloqueante y sigue el botón de crear personas', async () => {
+    await montar();
+    await pegar('EMP-90\tL\tL\tL\tL\tL\tL\tL');
+    expect(raiz.textContent).toContain('No se ha reconocido ningún código de la plantilla (EMP-…).');
+    expect(boton('Guardar horario de la semana').disabled).toBe(true);
+    expect(boton('Crear la persona que falta')).toBeTruthy();
+  });
+
+  describe('rejilla de edición', () => {
+    const escribir = async (etiqueta: string, valor: string) => {
+      const celda = raiz.querySelector<HTMLInputElement>(`input[aria-label="${etiqueta}"]`)!;
+      await act(() => {
+        celda.value = valor;
+        celda.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    async function conSemanaGuardada() {
+      const almacen = await montar();
+      await pegar(TABLA);
+      await act(() => boton('Guardar horario de la semana').click());
+      await act(() => boton('Sí, guardar horario').click());
+      return almacen;
+    }
+
+    it('el botón dice «Cerrar» con la rejilla abierta', async () => {
+      await conSemanaGuardada();
+      await act(() => boton('Ver y editar').click());
+      const b = [...raiz.querySelectorAll('button')].find((x) => x.getAttribute('aria-expanded') === 'true')!;
+      expect(b.textContent).toBe('Cerrar');
+    });
+
+    it('cerrar con cambios sin guardar pide confirmación; cancelar los conserva', async () => {
+      await conSemanaGuardada();
+      await act(() => boton('Ver y editar').click());
+      await escribir('EMP-01, martes', 'L');
+      await act(() => boton('Cerrar').click());
+      expect(raiz.textContent).toContain('Cambios sin guardar');
+      await act(() => boton('Cancelar').click());
+      expect(raiz.querySelector<HTMLInputElement>('input[aria-label="EMP-01, martes"]')!.value).toBe('L');
+      await act(() => boton('Cerrar').click());
+      await act(() => boton('Sí, descartar cambios').click());
+      expect(raiz.querySelector('input[aria-label="EMP-01, martes"]')).toBeNull();
+    });
+
+    it('cerrar sin cambios no pregunta', async () => {
+      await conSemanaGuardada();
+      await act(() => boton('Ver y editar').click());
+      await act(() => boton('Cerrar').click());
+      expect(raiz.textContent).not.toContain('Cambios sin guardar');
+      expect(raiz.querySelector('input[aria-label="EMP-01, martes"]')).toBeNull();
+    });
+
+    it('al deshacer el horario guardado, la rejilla se reinicia con los datos actuales', async () => {
+      const almacen = await conSemanaGuardada();
+      await act(() => boton('Ver y editar').click());
+      await escribir('EMP-01, martes', 'L');
+      await act(() => boton('Guardar cambios').click());
+      await act(() => boton('Ver y editar').click());
+      expect(raiz.querySelector<HTMLInputElement>('input[aria-label="EMP-01, martes"]')!.value).toBe('L');
+      await act(() => almacen.deshacer());
+      expect(raiz.querySelector<HTMLInputElement>('input[aria-label="EMP-01, martes"]')!.value).toBe('15:45–22:00');
+    });
+  });
+
+  it('una petición del Cuadrante cambia a la semana pedida', async () => {
+    const almacen = crearAlmacenApp(crearEstadoEjemplo(), { guardar: () => ({ ok: true }) });
+    raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    await act(() => render(<HorarioPlantilla almacen={almacen} alIrASemana={() => {}} peticion={{ lunes: '2026-12-14', nonce: 1 }} />, raiz));
+    expect(raiz.textContent).toContain('Semana del 14/12/2026 al 20/12/2026');
+  });
 });

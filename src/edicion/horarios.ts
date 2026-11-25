@@ -192,13 +192,14 @@ export function quitarHorario(estado: EstadoApp, lunes: FechaISO): EstadoApp {
   return { ...estado, horarios: resto };
 }
 
-/** Cambia el turno de una persona un día (la semana debe tener horario o se crea vacío). Tramos inválidos se descartan. */
+/** Cambia el turno de una persona un día (la semana debe tener horario o se crea vacío). Tramos inválidos se descartan. Si se pasa `ahora`, actualiza `actualizado`. */
 export function cambiarTurno(
   estado: EstadoApp,
   lunes: FechaISO,
   personaId: Id,
   fecha: FechaISO,
   tramos: Intervalo[],
+  ahora?: string | null,
 ): EstadoApp {
   const actual: HorarioSemana = estado.horarios[lunes] ?? { lunes, turnos: [], actualizado: null };
   const nuevo: TurnoDia = { personaId, fecha, tramos: ordenar(tramos.filter(intervaloValido)) };
@@ -206,7 +207,7 @@ export function cambiarTurno(
   const turnos = hay
     ? actual.turnos.map((t) => (t.personaId === personaId && t.fecha === fecha ? nuevo : t))
     : [...actual.turnos, nuevo];
-  return guardarHorario(estado, { ...actual, turnos });
+  return guardarHorario(estado, { ...actual, turnos, actualizado: ahora === undefined ? actual.actualizado : ahora });
 }
 
 /** Crea una persona por cada código que no exista ya (comparando con `normalizarCodigo`), sin habilitaciones. */

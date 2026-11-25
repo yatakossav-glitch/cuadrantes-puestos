@@ -128,6 +128,13 @@ describe('guardar, quitar, cambiar turno', () => {
     const c = cambiarTurno(crearEstadoEjemplo(), '2026-12-07', 'per-01', '2026-12-08', [M]);
     expect(c.horarios['2026-12-07']).toEqual({ lunes: '2026-12-07', actualizado: null, turnos: [{ personaId: 'per-01', fecha: '2026-12-08', tramos: [M] }] });
   });
+  it('cambiarTurno actualiza «actualizado» si se le pasa la fecha y la conserva si no', () => {
+    const e = guardarHorario(crearEstadoEjemplo(), { ...horario, actualizado: '2026-11-01T10:00:00.000Z' });
+    const a = cambiarTurno(e, LUNES, 'per-01', LUNES, [M], '2026-11-02T09:00:00.000Z');
+    expect(a.horarios[LUNES]!.actualizado).toBe('2026-11-02T09:00:00.000Z');
+    expect(cambiarTurno(e, LUNES, 'per-01', LUNES, [M]).horarios[LUNES]!.actualizado).toBe('2026-11-01T10:00:00.000Z');
+    expect(cambiarTurno(e, LUNES, 'per-01', LUNES, [M], null).horarios[LUNES]!.actualizado).toBeNull();
+  });
 });
 
 describe('impactoGuardarHorario', () => {

@@ -171,6 +171,11 @@ describe('motivoNoDisponible con horario de la plantilla', () => {
     expect(motivo(conTurno([]), 'per-01')).toBe('libra según el horario');
     expect(motivo(conTurno([{ inicio: 600, fin: 945 }]), 'per-02')).toBe('libra según el horario');
   });
+  it('con horario, el horario manda sobre los días libres del patrón', () => {
+    const e = conTurno([{ inicio: 600, fin: 945 }]);
+    const libra = { ...e, personas: e.personas.map((p) => (p.id === 'per-01' ? { ...p, patron: [{ indiceCiclo: 0, equipo: null, diasLibres: [3 as const] }] } : p)) };
+    expect(motivo(libra, 'per-01')).toBeNull();
+  });
   it('sin horario de la semana no limita', () => {
     expect(motivo(e0, 'per-01')).toBeNull();
   });

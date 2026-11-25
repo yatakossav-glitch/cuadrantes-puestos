@@ -263,6 +263,15 @@ describe('personaDisponible · horario de la plantilla', () => {
   const comprobar = (datos: DatosPlanificacion, a: Asignacion, dura = true) =>
     definicion.comprobar({ ...reglaDe(datos, 'personaDisponible'), dura, peso: 5 }, contexto(datos, []), a);
 
+  it('con horario en la semana, el horario manda sobre los días libres del patrón', () => {
+    const datos = conHorario({ 'per-07': [T(600, 945)] });
+    datos.personas.find((x) => x.id === 'per-07')!.patron = [{ indiceCiclo: 0, equipo: null, diasLibres: [3] }];
+    expect(evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')])).toEqual([]);
+    const sinHorario = crearEstadoEjemplo();
+    sinHorario.personas.find((x) => x.id === 'per-07')!.patron = [{ indiceCiclo: 0, equipo: null, diasLibres: [3] }];
+    expect(evaluar(sinHorario, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')])).toHaveLength(1);
+  });
+
   it('sin horario en la semana no limita', () => {
     const a = puesto(JUEVES, caja1, 'franja-caja-1', 'per-07');
     expect(evaluar(crearEstadoEjemplo(), [a])).toEqual([]);

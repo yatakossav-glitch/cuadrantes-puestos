@@ -80,7 +80,8 @@ El horario dice quién trabaja cada día y a qué horas; el cuadrante reparte de
 - Una hora de entrada y de salida: `10:00-15:45`, `10-15:45`, `10.00 a 15.45`, `10h-15:45h`.
 - Turno partido: `10-14 y 17-21`, `10:00-14:00 / 17:00-21:00` o `10-14, 17-21`.
 - Una letra de turno: `M` (mañana) o `T` (tarde), también `mañana` o `tarde`; `M+T` junta los dos.
-- Libra: casilla vacía, `L`, `libre`, `descanso`, `fiesta`, `vacaciones`, `baja` o `-`. No se guarda el motivo.
+- Libra: casilla vacía, `L`, `V`, `libre`, `libranza`, `permiso`, `descanso`, `descanso semanal`, `fiesta`, `-`, y cualquier texto que empiece por `baja` o `vac` (`Baja médica`, `Vac.`, `vacaciones`). No se guarda el texto ni el motivo.
+- Las horas pueden llevar segundos (`10:00:00-15:45:00`). Una casilla de Excel con varios tramos en líneas distintas (Alt+Intro) se entiende como turno partido.
 - Cualquier otra cosa se marca como error.
 
 Las letras se pueden cambiar o ampliar en **Turnos por letra** (letra, nombre y horas de cada turno, con **Añadir turno**). Esos ajustes solo valen mientras no cierres esa sección.

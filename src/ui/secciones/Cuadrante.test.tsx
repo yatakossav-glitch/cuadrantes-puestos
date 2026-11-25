@@ -321,7 +321,7 @@ describe('Cuadrante', () => {
     expect(aviso.getAttribute('role')).toBe('status');
     expect(aviso.textContent).toContain('Esta semana no tiene horario de la plantilla');
     await pulsar(boton('Importar horario'));
-    expect(importar).toHaveBeenCalled();
+    expect(importar).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
   });
 
   it('con horario muestra el aviso con el número de personas y el turno en Por persona', async () => {

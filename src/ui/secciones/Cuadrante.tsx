@@ -69,7 +69,8 @@ export interface PropsCuadrante {
   /** Petición externa de ir a una semana y, si `recubrir`, lanzar «Completar huecos». */
   peticion?: { lunes: FechaISO; recubrir: boolean; nonce: number } | null;
   /** Abre la importación del horario de la plantilla (Datos). */
-  alImportarHorario?: () => void;
+  /** Abre Datos para importar el horario de la semana indicada (la que se está viendo). */
+  alImportarHorario?: (lunes: FechaISO) => void;
 }
 
 const PX_POR_MINUTO = 1.5;
@@ -407,7 +408,7 @@ export function Cuadrante({ almacen, resultado, foco, alCambiarSemana, motor = m
         <p class="cq-aviso-horario" role="status">
           Esta semana no tiene horario de la plantilla: se puede asignar a cualquiera a cualquier hora.{' '}
           {alImportarHorario && (
-            <button type="button" class="boton cq-mini" onClick={alImportarHorario}>
+            <button type="button" class="boton cq-mini" onClick={() => alImportarHorario(lunes)}>
               Importar horario
             </button>
           )}
