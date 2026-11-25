@@ -10,7 +10,7 @@
  */
 import type { EstadoApp } from './tipos';
 
-export const VERSION_ESQUEMA = 2 as const;
+export const VERSION_ESQUEMA = 3 as const;
 
 export const CLAVE_ALMACEN = 'cuadrantes-puestos';
 export const PREFIJO_RESPALDO = 'CUADRANTES1.';
@@ -54,6 +54,14 @@ export const MIGRACIONES: readonly Migracion[] = [
         ...datos,
         puestos: datos['puestos'].map((p: unknown) => (esObjeto(p) ? { vigenteDesde: null, vigenteHasta: null, ...p } : p)),
       };
+    },
+  },
+  {
+    // v2 → v3: horario de la plantilla por semana; vacío = sin limitación (como antes).
+    desde: 2,
+    migrar(datos: unknown): unknown {
+      if (!esObjeto(datos)) return datos;
+      return { horarios: {}, ...datos };
     },
   },
 ];

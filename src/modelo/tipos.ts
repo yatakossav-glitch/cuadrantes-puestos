@@ -333,6 +333,24 @@ export interface SemanaTipo {
   asignaciones: AsignacionTipo[];
 }
 
+// ───────────────────────── Horario de la plantilla (versión 3) ─────────────────────────
+
+/** Turno de una persona un día: tramos de trabajo ordenados y sin solapes. Vacío = libra ese día. */
+export interface TurnoDia {
+  personaId: Id;
+  fecha: FechaISO;
+  tramos: Intervalo[];
+}
+
+/** Horario de la plantilla de una semana, tal como lo pasan la semana anterior (importado o escrito a mano). */
+export interface HorarioSemana {
+  /** Lunes de la semana. */
+  lunes: FechaISO;
+  turnos: TurnoDia[];
+  /** Fecha y hora ISO de la última importación o edición. */
+  actualizado: string | null;
+}
+
 // ───────────────────────── Incidencias ─────────────────────────
 
 /**
@@ -383,6 +401,12 @@ export interface DatosPlanificacion {
   rotacion: Rotacion;
   semanasTipo: SemanaTipo[];
   incidencias: Incidencia[];
+  /**
+   * Horario de la plantilla por semana (versión 3 del esquema), clave = lunes. Si una semana tiene horario,
+   * cada persona solo está disponible en los tramos de su turno de cada día; quien no figura, no trabaja esa semana.
+   * Sin horario para la semana, no hay limitación (comportamiento anterior).
+   */
+  horarios: Record<FechaISO, HorarioSemana>;
 }
 
 /** Estado completo persistido. */
