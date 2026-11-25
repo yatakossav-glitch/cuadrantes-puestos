@@ -228,6 +228,7 @@ export function crearEstadoEjemplo(): EstadoApp {
     rotacion: { longitudCiclo: 2, lunesReferencia: '2026-11-23', etiquetas: ['A', 'B'] },
     semanasTipo: [],
     incidencias: [],
+    horarios: {},
     cuadrantes: {},
   };
 }
@@ -242,6 +243,7 @@ export function crearEstadoVacio(): EstadoApp {
     rotacion: { longitudCiclo: 1, lunesReferencia: '2026-11-23', etiquetas: ['A'] },
     semanasTipo: [],
     incidencias: [],
+    horarios: {},
     cuadrantes: {},
   };
 }

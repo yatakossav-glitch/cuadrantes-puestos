@@ -13,6 +13,7 @@ function estadoMinimo(semilla = 1): EstadoApp {
     rotacion: { longitudCiclo: 1, lunesReferencia: '2026-11-23', etiquetas: ['A'] },
     semanasTipo: [],
     incidencias: [],
+    horarios: {},
     cuadrantes: {},
   };
 }

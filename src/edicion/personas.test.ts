@@ -77,6 +77,27 @@ describe('personas', () => {
     expect(n.incidencias.map((i) => i.id)).toEqual(['i2', 'i3']);
     expect(e).toEqual(copia);
   });
+  it('borrar una persona quita también sus turnos del horario y el impacto los cuenta', () => {
+    const e = estadoConAsignaciones();
+    e.horarios = {
+      '2026-11-23': {
+        lunes: '2026-11-23',
+        actualizado: null,
+        turnos: [
+          { personaId: 'per-20', fecha: '2026-11-23', tramos: [{ inicio: 600, fin: 945 }] },
+          { personaId: 'per-20', fecha: '2026-11-24', tramos: [] },
+          { personaId: 'per-21', fecha: '2026-11-23', tramos: [] },
+        ],
+      },
+      '2026-11-30': { lunes: '2026-11-30', actualizado: null, turnos: [{ personaId: 'per-20', fecha: '2026-11-30', tramos: [] }] },
+    };
+    expect(impactoBorrarPersona(e, 'per-20').efectos).toEqual(['Se quitarán 3 turnos del horario de la plantilla']);
+    expect(impactoBorrarPersona(e, 'per-21').efectos).toEqual(['Se quitará 1 turno del horario de la plantilla']);
+    const n = borrarPersona(e, 'per-20');
+    expect(n.horarios['2026-11-23']!.turnos.map((t) => t.personaId)).toEqual(['per-21']);
+    expect(n.horarios['2026-11-30']!.turnos).toEqual([]);
+    expect(e.horarios['2026-11-23']!.turnos).toHaveLength(3);
+  });
   it('impacto en singular', () => {
     const e = estadoConAsignaciones();
     expect(impactoBorrarPersona(e, 'per-03').efectos).toEqual(['Se quitará 1 asignación en 1 semana']);

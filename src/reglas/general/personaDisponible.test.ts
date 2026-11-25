@@ -245,3 +245,80 @@ describe('personaDisponible · comprobar coincide con evaluar', () => {
     expect(performance.now() - t0).toBeLessThan(1000);
   });
 });
+
+describe('personaDisponible · horario de la plantilla', () => {
+  const T = (inicio: number, fin: number) => ({ inicio, fin });
+  const conHorario = (turnos: Record<string, ReturnType<typeof T>[]>, dia = JUEVES): DatosPlanificacion => {
+    const datos = crearEstadoEjemplo();
+    datos.horarios = {
+      [LUNES]: {
+        lunes: LUNES,
+        actualizado: null,
+        turnos: Object.entries(turnos).map(([personaId, tramos]) => ({ personaId, fecha: dia, tramos })),
+      },
+    };
+    return datos;
+  };
+  const evaluar = (datos: DatosPlanificacion, a: Asignacion[]) => definicion.evaluar(reglaDe(datos, 'personaDisponible'), contexto(datos, a));
+  const comprobar = (datos: DatosPlanificacion, a: Asignacion, dura = true) =>
+    definicion.comprobar({ ...reglaDe(datos, 'personaDisponible'), dura, peso: 5 }, contexto(datos, []), a);
+
+  it('sin horario en la semana no limita', () => {
+    const a = puesto(JUEVES, caja1, 'franja-caja-1', 'per-07');
+    expect(evaluar(crearEstadoEjemplo(), [a])).toEqual([]);
+  });
+
+  it('asignación dentro de su turno: bien; fuera: incumple con su turno en el mensaje', () => {
+    const datos = conHorario({ 'per-07': [T(600, 945)] });
+    expect(evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')])).toEqual([]);
+    const r = evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-5', 'per-07')]);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ marca: 'noDisponible', dura: true, personaId: 'per-07' });
+    expect(r[0]?.mensaje).toBe('EMP-07 no está de turno a esa hora (su turno: 10:00–15:45) y tiene asignación el jueves 26/11 15:45–17:20');
+  });
+
+  it('una franja que cruza el borde del tramo cuenta como fuera de turno', () => {
+    const datos = conHorario({ 'per-07': [T(600, 650)] });
+    expect(evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')])).toHaveLength(1); // 10:00–11:30 no cabe en 10:00–10:50
+    const justo = conHorario({ 'per-07': [T(600, 690)] });
+    expect(evaluar(justo, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')])).toEqual([]);
+  });
+
+  it('turno partido: cada franja debe caber entera en un tramo', () => {
+    const datos = conHorario({ 'per-07': [T(600, 780), T(1020, 1260)] });
+    expect(evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-2', 'per-07'), puesto(JUEVES, caja1, 'franja-caja-7', 'per-07')])).toEqual([]);
+    expect(evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-4', 'per-07')])).toHaveLength(1);
+  });
+
+  it('libra y no figura', () => {
+    const datos = conHorario({ 'per-07': [] });
+    const libra = evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-07')]);
+    expect(libra[0]?.mensaje).toBe('EMP-07 libra según el horario de la semana y tiene asignación el jueves 26/11 10:00–11:30');
+    const nofigura = evaluar(datos, [puesto(JUEVES, caja1, 'franja-caja-1', 'per-08')]);
+    expect(nofigura[0]?.mensaje).toBe('EMP-08 no figura en el horario de la semana y tiene asignación el jueves 26/11 10:00–11:30');
+  });
+
+  it('otro día de la semana de una persona que figura sin turno ese día: libra', () => {
+    const datos = conHorario({ 'per-07': [T(600, 945)] });
+    const r = evaluar(datos, [puesto(MIERCOLES, caja1, 'franja-caja-1', 'per-07')]);
+    expect(r[0]?.mensaje).toContain('EMP-07 libra según el horario de la semana');
+  });
+
+  it('las pausas no se marcan por horario, ni entre dos tramos de un partido', () => {
+    const datos = conHorario({ 'per-07': [T(600, 780), T(1020, 1260)] });
+    expect(evaluar(datos, [pausa(JUEVES, 'per-07', 14 * 60, 15 * 60), pausa(JUEVES, 'per-08', 14 * 60, 15 * 60)])).toEqual([]);
+    expect(comprobar(datos, pausa(JUEVES, 'per-07', 14 * 60, 15 * 60)).permitido).toBe(true);
+  });
+
+  it('comprobar es coherente con evaluar (dura y blanda)', () => {
+    const datos = conHorario({ 'per-07': [T(600, 945)] });
+    const dentro = puesto(JUEVES, caja1, 'franja-caja-1', 'per-07');
+    const fuera = puesto(JUEVES, caja1, 'franja-caja-5', 'per-07');
+    expect(comprobar(datos, dentro)).toEqual({ permitido: true, coste: 0, motivos: [] });
+    const dura = comprobar(datos, fuera);
+    expect(dura).toMatchObject({ permitido: false, coste: 0 });
+    expect(dura.motivos[0]).toContain('EMP-07 no está de turno a esa hora (su turno: 10:00–15:45)');
+    expect(comprobar(datos, fuera, false)).toMatchObject({ permitido: true, coste: 5 });
+    expect(comprobar(datos, puesto(JUEVES, caja1, 'franja-caja-1', 'per-08')).motivos[0]).toContain('no figura en el horario');
+  });
+});

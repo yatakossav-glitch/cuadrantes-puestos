@@ -19,6 +19,7 @@ import type {
   Rotacion,
 } from '../modelo/tipos';
 import { horarioDe } from './horario';
+import { enTurno, turnoDe } from './horarios';
 
 export interface HuecoEditable {
   fecha: FechaISO;
@@ -217,6 +218,10 @@ export function motivoNoDisponible(
   }
   if (puesto.requiereHabilitacion && !persona.habilitaciones.includes(puesto.id) && !persona.habilitaciones.includes(puesto.areaId)) {
     return 'sin habilitación';
+  }
+  const tramos = turnoDe(estado, persona.id, fecha);
+  if (tramos !== null && franjas.some((f) => !enTurno(estado, persona.id, fecha, f))) {
+    return tramos.length === 0 ? 'libra según el horario' : 'fuera de su turno';
   }
   const ocupada = (estado.cuadrantes[lunes]?.asignaciones ?? []).some((a) => {
     if (a.personaId !== persona.id || a.fecha !== fecha) return false;

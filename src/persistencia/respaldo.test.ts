@@ -47,6 +47,7 @@ function estadoMinimo(): EstadoApp {
     rotacion: { longitudCiclo: 2, lunesReferencia: '2026-11-23', etiquetas: ['A', 'B'] },
     semanasTipo: [],
     incidencias: [{ id: 'i1', tipo: 'ausencia', personaId: 'p2', desde: '2026-11-24', hasta: '2026-11-25', tramo: null, nota: '' }],
+    horarios: {},
     cuadrantes: {
       '2026-11-23': {
         lunes: '2026-11-23',
@@ -143,6 +144,17 @@ describe('exportarRespaldo / importarRespaldo', () => {
     const r = await importarRespaldo(await respaldoDe({ formato: 'cuadrantes-puestos', version: 1, estado: { config: {} } }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('formato esperado');
+  });
+
+  it('importar datos de versión 2 (sin horarios) deja horarios vacío', async () => {
+    const antiguo = structuredClone(estadoMinimo()) as unknown as Record<string, unknown>;
+    delete antiguo['horarios'];
+    const r = await importarRespaldo(await respaldoDe({ formato: 'cuadrantes-puestos', version: 2, estado: antiguo }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.versionOrigen).toBe(2);
+      expect(r.estado.horarios).toEqual({});
+    }
   });
 
   it('devuelve avisos de duplicados y huérfanos', async () => {

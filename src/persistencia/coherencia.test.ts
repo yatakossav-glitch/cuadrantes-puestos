@@ -47,6 +47,7 @@ function estadoMinimo(): EstadoApp {
     rotacion: { longitudCiclo: 2, lunesReferencia: '2026-11-23', etiquetas: ['A', 'B'] },
     semanasTipo: [],
     incidencias: [{ id: 'i1', tipo: 'ausencia', personaId: 'p2', desde: '2026-11-24', hasta: '2026-11-25', tramo: null, nota: '' }],
+    horarios: {},
     cuadrantes: {
       '2026-11-23': {
         lunes: '2026-11-23',
@@ -338,5 +339,70 @@ describe('comprobarCoherencia (fase 1, revisión)', () => {
     expect(t).toContain('«Excl» se refiere a un puesto que no existe');
     expect(t).toContain('«MaxF» se refiere a un área que no existe');
     expect(t).toContain('restricción de EMP-01');
+  });
+});
+
+describe('horarios de la plantilla (versión 3)', () => {
+  const horario = (extra: Record<string, unknown> = {}) => ({
+    lunes: '2026-11-23',
+    actualizado: null,
+    turnos: [{ personaId: 'p1', fecha: '2026-11-24', tramos: [{ inicio: 600, fin: 945 }] }],
+    ...extra,
+  });
+  const con = (h: unknown) => ({ ...(estadoMinimo() as unknown as Record<string, unknown>), horarios: { '2026-11-23': h } });
+
+  it('exige el campo horarios', () => {
+    const e = estadoMinimo() as unknown as Record<string, unknown>;
+    delete e['horarios'];
+    const r = validarEstructura(e);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('horarios');
+  });
+
+  it('acepta un horario válido, también con turno que libra y partido', () => {
+    expect(validarEstructura(con(horario())).ok).toBe(true);
+    const partido = horario({ turnos: [{ personaId: 'p1', fecha: '2026-11-24', tramos: [] }, { personaId: 'p2', fecha: '2026-11-24', tramos: [{ inicio: 600, fin: 840 }, { inicio: 1020, fin: 1260 }] }] });
+    expect(validarEstructura(con(partido)).ok).toBe(true);
+  });
+
+  it('rechaza tramos con inicio >= fin o fuera de 0–1440, y estructuras mal formadas', () => {
+    const malo = (tramos: unknown[]) => validarEstructura(con(horario({ turnos: [{ personaId: 'p1', fecha: '2026-11-24', tramos }] })));
+    expect(malo([{ inicio: 900, fin: 600 }]).ok).toBe(false);
+    expect(malo([{ inicio: 600, fin: 600 }]).ok).toBe(false);
+    expect(malo([{ inicio: -5, fin: 600 }]).ok).toBe(false);
+    expect(malo([{ inicio: 600, fin: 1441 }]).ok).toBe(false);
+    expect(malo([{ inicio: '10:00', fin: 600 }]).ok).toBe(false);
+    expect(validarEstructura(con(horario({ turnos: 'x' }))).ok).toBe(false);
+    expect(validarEstructura(con(horario({ turnos: [{ personaId: 'p1', fecha: '2026-02-30', tramos: [] }] }))).ok).toBe(false);
+    expect(validarEstructura(con(7)).ok).toBe(false);
+    expect(validarEstructura({ ...(estadoMinimo() as unknown as Record<string, unknown>), horarios: [] }).ok).toBe(false);
+  });
+
+  it('comprobarCoherencia avisa de personas inexistentes, fechas fuera de la semana y clave que no es lunes', () => {
+    const e = estadoMinimo();
+    e.horarios = {
+      '2026-11-23': {
+        lunes: '2026-11-23',
+        actualizado: null,
+        turnos: [
+          { personaId: 'p1', fecha: '2026-11-24', tramos: [] },
+          { personaId: 'fantasma', fecha: '2026-11-25', tramos: [] },
+          { personaId: 'p1', fecha: '2026-12-01', tramos: [] },
+        ],
+      },
+      '2026-11-25': { lunes: '2026-11-25', actualizado: null, turnos: [] },
+      '2026-11-30': { lunes: '2026-11-23', actualizado: null, turnos: [] },
+    };
+    const t = comprobarCoherencia(e).join('\n');
+    expect(t).toContain('semana del 2026-11-23: tiene turnos de una persona que no existe');
+    expect(t).toContain('semana del 2026-11-23: un turno tiene una fecha fuera de esa semana');
+    expect(t).toContain('semana del 2026-11-25: la clave no es un lunes');
+    expect(t).toContain('semana del 2026-11-30: su lunes interno');
+  });
+
+  it('un horario correcto no genera avisos', () => {
+    const e = estadoMinimo();
+    e.horarios = { '2026-11-23': horario() as unknown as EstadoApp['horarios'][string] };
+    expect(comprobarCoherencia(e)).toEqual([]);
   });
 });

@@ -608,6 +608,7 @@ export interface TurnoConLetra { letra: string; nombre: string; tramos: Interval
 export function letrasPorDefecto(datos: DatosPlanificacion): TurnoConLetra[]
     // M: [primer inicio de franja de los puestos activos → corte), T: [corte → último fin); si no hay puestos, 10:00 / corte / 22:00
 export interface CeldaLeida { texto: string; tramos: Intervalo[]; libre: boolean; error: string | null }
+export function codigoCanonico(codigo: string): string   // 'emp 7' → 'EMP-07' (también la usa crearPersonasDesdeCodigos)
 export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): CeldaLeida
     // '' · 'L' · 'libre' · 'descanso' · 'D' · 'fiesta' · 'vacaciones' · 'vac' · 'baja' · '-' · '—' → libre (no se guarda el motivo)
     // '10:00-15:45' · '10-15:45' · '10.00 a 15.45' · '10:00–15:45' · '10h-15:45h' → un tramo; 'a', '-', '–', '—' como separador
@@ -637,7 +638,7 @@ export function leerHorario(texto: string, lunes: FechaISO, datos: DatosPlanific
 ```ts
 export function turnoDe(datos: DatosPlanificacion, personaId: Id, fecha: FechaISO): Intervalo[] | null   // null = la semana no tiene horario
 export function enTurno(datos: DatosPlanificacion, personaId: Id, fecha: FechaISO, iv: Intervalo): boolean  // true si no hay horario o iv cabe entero en un tramo
-export function horarioDesdeLectura(lectura: LecturaHorario, ahora?: string): HorarioSemana   // solo filas con personaId; días null → libra
+export function horarioDesdeLectura(lectura: LecturaHorario, ahora: string | null = null): HorarioSemana   // solo filas con personaId; días null → libra; código repetido: gana la última fila
 export function impactoGuardarHorario(estado: EstadoApp, horario: HorarioSemana): Impacto
     // bloqueos: ninguno; efectos: «Reemplazará el horario de la semana del 30 nov», «12 asignaciones ya hechas quedan fuera de turno
     // (EMP-07 martes…): puedes recubrirlas desde el Cuadrante», «3 personas activas no figuran y no trabajarán esa semana»
@@ -645,12 +646,15 @@ export function guardarHorario(estado: EstadoApp, horario: HorarioSemana): Estad
 export function quitarHorario(estado: EstadoApp, lunes: FechaISO): EstadoApp
 export function cambiarTurno(estado: EstadoApp, lunes: FechaISO, personaId: Id, fecha: FechaISO, tramos: Intervalo[]): EstadoApp
 export function crearPersonasDesdeCodigos(estado: EstadoApp, codigos: readonly string[], ids?: () => Id): EstadoApp  // como crearPersona, con ese código, sin habilitaciones
+export function semanaConHorario(datos, fecha): boolean        // añadidos: ¿la semana de esa fecha tiene horario?
+export function figuraEnHorario(datos, personaId, lunes): boolean   // ¿tiene entrada (aunque sea 'libra') en el horario de esa semana?
 export function minutosDeTurno(horario: HorarioSemana, personaId: Id): Minutos
 export function describirTurno(tramos: Intervalo[] | null): string   // 'Libra' · '10:00–15:45' · '10:00–14:00 y 17:00–21:00' · 'Sin horario'
 ```
 
-`personaDisponible`: «EMP-07 no está de turno a esa hora el martes 01/12 (su turno: 10:00–15:45)», «EMP-07 libra el martes 01/12 según el horario
-de la semana», «EMP-07 no figura en el horario de la semana». `edicion/cuadrante.motivoNoDisponible`: 'fuera de su turno' / 'libra según el horario'.
+`personaDisponible` (solo asignaciones de puesto; las pausas no se marcan por horario): «EMP-07 no está de turno a esa hora (su turno: 10:00–15:45) y tiene
+asignación el martes 01/12 10:00–11:30», «EMP-07 libra según el horario de la semana y tiene asignación…», «EMP-07 no figura en el horario de la semana y tiene asignación…»
+(mismo patrón «persona + motivo + asignación» que el resto de motivos de la regla). `edicion/cuadrante.motivoNoDisponible`: 'fuera de su turno' / 'libra según el horario'.
 `borrarPersona` quita también sus turnos. `comprobarCoherencia` avisa de turnos de personas inexistentes o con fecha fuera de su semana.
 
 ### 13.3 Interfaz

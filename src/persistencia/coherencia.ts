@@ -2,7 +2,7 @@
  * Validación de estructura y comprobaciones de coherencia del estado persistido.
  * Funciones puras, sin DOM ni almacenamiento.
  */
-import { NOMBRES_DIA, diaSemana, esFechaISO } from '../modelo/fechas';
+import { NOMBRES_DIA, diaSemana, diferenciaDias, esFechaISO } from '../modelo/fechas';
 import type {
   EstadoApp,
   HorarioDia,
@@ -348,6 +348,32 @@ export function validarEstructura(datos: unknown): { ok: true; estado: EstadoApp
     }
   });
 
+  if (c.objeto(datos['horarios'], 'horarios')) {
+    for (const [lunes, h] of Object.entries(datos['horarios'] as Obj)) {
+      const r = `horarios[${lunes}]`;
+      c.fecha(lunes, 'horarios', 'clave');
+      if (!c.objeto(h, r)) continue;
+      c.texto(h, r, 'lunes');
+      c.fechaCampo(h, r, 'lunes');
+      c.textoONulo(h, r, 'actualizado');
+      c.listaCampo(h, r, 'turnos')?.forEach((t, i) => {
+        const rr = `${r}.turnos[${i + 1}]`;
+        if (!c.objeto(t, rr)) return;
+        c.texto(t, rr, 'personaId');
+        c.texto(t, rr, 'fecha');
+        c.fechaCampo(t, rr, 'fecha');
+        c.listaCampo(t, rr, 'tramos')?.forEach((tr, j) => {
+          const rt = `${rr}.tramos[${j + 1}]`;
+          if (!c.objeto(tr, rt)) return;
+          c.intervalo(tr, rt);
+          if (esNumero(tr['inicio']) && esNumero(tr['fin']) && !(tr['inicio'] >= 0 && tr['fin'] <= 1440 && tr['inicio'] < tr['fin'])) {
+            c.error(`${rt}: el tramo debe tener inicio anterior al fin y estar entre 00:00 y 24:00.`);
+          }
+        });
+      });
+    }
+  }
+
   if (c.objeto(datos['cuadrantes'], 'cuadrantes')) {
     for (const [lunes, cu] of Object.entries(datos['cuadrantes'] as Obj)) {
       const r = `cuadrantes[${lunes}]`;
@@ -490,6 +516,19 @@ export function comprobarCoherencia(estado: EstadoApp): string[] {
     if (inc.tipo === 'puestoCerrado' && !puestoPorId.has(inc.puestoId)) {
       avisos.push(`Un cierre de puesto (${inc.desde}) es de un puesto que no existe (${nombrePuesto(inc.puestoId)}).`);
     }
+  }
+  for (const [lunes, h] of Object.entries(estado.horarios)) {
+    const semana = `Horario de la semana del ${lunes}`;
+    if (!esFechaISO(lunes) || diaSemana(lunes) !== 0) avisos.push(`${semana}: la clave no es un lunes.`);
+    else if (h.lunes !== lunes) avisos.push(`${semana}: su lunes interno (${h.lunes}) no coincide con la clave.`);
+    const noExisten = new Set<string>();
+    let fuera = 0;
+    for (const t of h.turnos) {
+      if (!personaPorId.has(t.personaId)) noExisten.add(t.personaId);
+      if (!esFechaISO(t.fecha) || !esFechaISO(lunes) || diferenciaDias(lunes, t.fecha) < 0 || diferenciaDias(lunes, t.fecha) > 6) fuera += 1;
+    }
+    if (noExisten.size > 0) avisos.push(`${semana}: tiene turnos de ${noExisten.size === 1 ? 'una persona' : `${noExisten.size} personas`} que no existe${noExisten.size === 1 ? '' : 'n'}.`);
+    if (fuera > 0) avisos.push(`${semana}: ${fuera === 1 ? 'un turno tiene' : `${fuera} turnos tienen`} una fecha fuera de esa semana.`);
   }
   return avisos;
 }

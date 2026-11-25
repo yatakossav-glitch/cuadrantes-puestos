@@ -6,6 +6,7 @@ import { validarSemana } from '../validacion/validador';
 import { diaSemana } from '../modelo/fechas';
 import type { Asignacion, AsignacionPuesto, AsignacionTipo, EstadoApp } from '../modelo/tipos';
 import type { PeticionMotor, ProgresoMotor } from './contrato';
+import { enTurno } from '../edicion/horarios';
 import { crearMotor, MAX_ITERACIONES_POR_DEFECTO, motor } from './motor';
 
 const LUNES = '2026-11-23';
@@ -350,5 +351,50 @@ describe('sugerir', () => {
 
   it('un hueco de otra semana no tiene sugerencias', () => {
     expect(motor.sugerir(datos, '2026-11-30', [], hueco)).toEqual([]);
+  });
+});
+
+describe('generar · respeta el horario de la plantilla', () => {
+  const datos = crearEstadoEjemplo();
+  const fechas = Array.from({ length: 7 }, (_, i) => `2026-11-${23 + i}`);
+  const manana = { inicio: 600, fin: 945 };
+  const tarde = { inicio: 945, fin: 1320 };
+  datos.horarios = {
+    [LUNES]: {
+      lunes: LUNES,
+      actualizado: null,
+      turnos: datos.personas.flatMap((p, i) =>
+        fechas.map((fecha, d) => {
+          // Un tercio solo de mañana, un tercio solo de tarde, el resto todo el día; algunos días libran.
+          const tramos = i % 3 === 0 ? [manana] : i % 3 === 1 ? [tarde] : [manana, tarde];
+          const libra = (i % 5 === 0 && d === 1) || (i % 7 === 0 && d >= 5);
+          return { personaId: p.id, fecha, tramos: libra ? [] : tramos.map((t) => ({ ...t })) };
+        }),
+      ),
+    },
+  };
+  const r = motor.generar(peticion(datos));
+
+  it('no asigna a nadie fuera de su turno y no incumple personaDisponible', () => {
+    const v = validarSemana(datos, LUNES, r.asignaciones, CATALOGO);
+    expect(v.incumplimientos.filter((i) => i.tipo === 'personaDisponible')).toEqual([]);
+    for (const a of r.asignaciones) {
+      if (a.tipo !== 'puesto') continue;
+      const franja = crearIndice(datos, LUNES, r.asignaciones).intervalo(a);
+      expect(franja && enTurno(datos, a.personaId, a.fecha, franja)).toBe(true);
+    }
+  });
+
+  it('cubre todo lo que se puede cubrir con esas plantillas', () => {
+    expect(r.asignaciones.filter((a) => a.tipo === 'puesto').length).toBeGreaterThan(100);
+    const vacios = huecosVacios(datos, r.asignaciones);
+    expect(r.sinCubrir.length).toBe(vacios);
+    expect(vacios).toBe(0);
+  });
+
+  it('quien libra o no figura no recibe asignaciones', () => {
+    const sinHorario = { ...datos, horarios: { [LUNES]: { ...datos.horarios[LUNES]!, turnos: datos.horarios[LUNES]!.turnos.filter((t) => t.personaId !== 'per-02') } } };
+    const o = motor.generar(peticion(sinHorario));
+    expect(o.asignaciones.some((a) => a.personaId === 'per-02')).toBe(false);
   });
 });

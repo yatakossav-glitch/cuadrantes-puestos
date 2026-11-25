@@ -11,7 +11,7 @@ const cadena: Migracion[] = [
 describe('migrar', () => {
   it('sin migraciones y versión actual devuelve los datos tal cual', () => {
     const d = { a: 1 };
-    expect(migrar(d, 1)).toEqual({ ok: true, datos: d });
+    expect(migrar(d, VERSION_ESQUEMA)).toEqual({ ok: true, datos: d });
   });
 
   it('encadena 1 → 2 → 3', () => {

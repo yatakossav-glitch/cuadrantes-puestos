@@ -47,6 +47,7 @@ function estadoMinimo(): EstadoApp {
     rotacion: { longitudCiclo: 2, lunesReferencia: '2026-11-23', etiquetas: ['A', 'B'] },
     semanasTipo: [],
     incidencias: [{ id: 'i1', tipo: 'ausencia', personaId: 'p2', desde: '2026-11-24', hasta: '2026-11-25', tramo: null, nota: '' }],
+    horarios: {},
     cuadrantes: {
       '2026-11-23': {
         lunes: '2026-11-23',
@@ -99,6 +100,19 @@ describe('guardarEstado y cargarEstado', () => {
     if (r.tipo === 'ok') {
       expect(r.versionOrigen).toBe(1);
       expect(r.estado.puestos[0]).toMatchObject({ vigenteDesde: null, vigenteHasta: null });
+    }
+  });
+
+  it('cargar datos de versión 2 (sin horarios) los migra y deja horarios vacío', () => {
+    const antiguo = structuredClone(estadoMinimo()) as unknown as Record<string, unknown>;
+    delete antiguo['horarios'];
+    const a = almacenMemoria();
+    a.datos.set(CLAVE_ALMACEN, JSON.stringify({ version: 2, estado: antiguo }));
+    const r = cargarEstado(a);
+    expect(r.tipo).toBe('ok');
+    if (r.tipo === 'ok') {
+      expect(r.versionOrigen).toBe(2);
+      expect(r.estado.horarios).toEqual({});
     }
   });
 

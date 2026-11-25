@@ -113,6 +113,10 @@ export function impactoBorrarPersona(estado: EstadoApp, id: Id): Impacto {
   if (incidencias > 0) {
     efectos.push(`${incidencias === 1 ? 'Se quitará' : 'Se quitarán'} ${cuenta(incidencias, 'incidencia', 'incidencias')}`);
   }
+  const turnos = Object.values(estado.horarios).reduce((n, h) => n + h.turnos.filter((t) => t.personaId === id).length, 0);
+  if (turnos > 0) {
+    efectos.push(`${turnos === 1 ? 'Se quitará' : 'Se quitarán'} ${cuenta(turnos, 'turno', 'turnos')} del horario de la plantilla`);
+  }
   return { bloqueos: [], efectos };
 }
 
@@ -123,6 +127,12 @@ export function borrarPersona(estado: EstadoApp, id: Id): EstadoApp {
     ...sinAsignaciones,
     personas: sinAsignaciones.personas.filter((p) => p.id !== id),
     incidencias: sinAsignaciones.incidencias.filter((i) => !(i.tipo === 'ausencia' && i.personaId === id)),
+    horarios: Object.fromEntries(
+      Object.entries(sinAsignaciones.horarios).map(([lunes, h]) => [
+        lunes,
+        h.turnos.some((t) => t.personaId === id) ? { ...h, turnos: h.turnos.filter((t) => t.personaId !== id) } : h,
+      ]),
+    ),
   };
 }
 

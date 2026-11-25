@@ -155,6 +155,27 @@ describe('ayudas de edición', () => {
   });
 });
 
+describe('motivoNoDisponible con horario de la plantilla', () => {
+  const e0 = crearEstadoEjemplo();
+  const puesto = e0.puestos.find((p) => p.id === caja1)!;
+  const franjas = franjasAfectadas(puesto, JUEVES, 'franja-caja-1', true); // 10:00–13:00
+  const conTurno = (tramos: { inicio: number; fin: number }[]): EstadoApp => ({
+    ...e0,
+    horarios: { [LUNES]: { lunes: LUNES, actualizado: null, turnos: [{ personaId: 'per-01', fecha: JUEVES, tramos }] } },
+  });
+  const motivo = (e: EstadoApp, id: string) => motivoNoDisponible(e, LUNES, e.personas.find((p) => p.id === id)!, puesto, JUEVES, franjas);
+  it('dentro de su turno, fuera de su turno, libra y no figura', () => {
+    expect(motivo(conTurno([{ inicio: 600, fin: 945 }]), 'per-01')).toBeNull();
+    expect(motivo(conTurno([{ inicio: 900, fin: 1320 }]), 'per-01')).toBe('fuera de su turno');
+    expect(motivo(conTurno([{ inicio: 600, fin: 720 }]), 'per-01')).toBe('fuera de su turno');
+    expect(motivo(conTurno([]), 'per-01')).toBe('libra según el horario');
+    expect(motivo(conTurno([{ inicio: 600, fin: 945 }]), 'per-02')).toBe('libra según el horario');
+  });
+  it('sin horario de la semana no limita', () => {
+    expect(motivo(e0, 'per-01')).toBeNull();
+  });
+});
+
 describe('motivoFueraDeHorario', () => {
   const asignacion = (campos: Partial<AsignacionPuesto> = {}): AsignacionPuesto => ({
     id: 'a', tipo: 'puesto', fecha: JUEVES, puestoId: caja1, franjaId: 'franja-caja-1', plaza: 0, personaId: 'per-07',
