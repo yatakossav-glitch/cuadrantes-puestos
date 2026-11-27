@@ -948,7 +948,11 @@ export function equiposDesdeCalendario(
     for (const [fecha, c] of fila.dias) {
       if ((desde !== undefined && fecha < desde) || (hasta !== undefined && fecha > hasta) || c.error !== null) continue;
       for (const t of c.tramos) {
-        if (t.inicio < corte) manana += 1;
+        // Un tramo es de mañana o de tarde según dónde caiga la mayor parte de su duración respecto al corte
+        // (15:20–22:10 empieza antes de las 15:45, pero es de tarde).
+        const antes = Math.max(0, Math.min(t.fin, corte) - t.inicio);
+        const despues = Math.max(0, t.fin - Math.max(t.inicio, corte));
+        if (antes >= despues) manana += 1;
         else tarde += 1;
       }
     }

@@ -272,4 +272,10 @@ describe('equiposDesdeCalendario', () => {
     expect([...equiposDesdeCalendario(l, aMinutos('15:45'))]).toEqual([['10000001', 'M'], ['10000002', 'T'], ['10000003', 'A']]);
     expect(equiposDesdeCalendario(l, aMinutos('15:45'), '2026-03-02', '2026-03-02').get('10000003')).toBe('T');
   });
+
+  it('un turno que empieza poco antes del corte (15:20–22:10) es de tarde', () => {
+    const celda = (p: number) => (p === 0 ? '15:20 22:10' : '08:30 15:45');
+    const l = leerCalendario(tabla(personas6.slice(0, 2), 14, celda), vacio, letras, { primerDia: '2026-03-02', hoy: HOY });
+    expect([...equiposDesdeCalendario(l, aMinutos('15:45'))]).toEqual([['10000001', 'T'], ['10000002', 'M']]);
+  });
 });
