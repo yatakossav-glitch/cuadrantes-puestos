@@ -1,7 +1,7 @@
 .hp-semana { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; }
 .hp-texto-semana { margin: 6px 0; }
 .hp textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); }
-.hp h4 { margin: 14px 0 6px; font-size: 14px; }
+
 .hp-letras { margin: 8px 0; }
 .hp-letras summary { cursor: pointer; font-weight: 600; }
 .hp-letra { margin: 8px 0; border: 1px solid var(--borde); border-radius: var(--radio); }
@@ -18,3 +18,8 @@
 .hp-semana-fila { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
 .hp-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 480px) { .hp-tabla input { width: 110px; } }
+.hp-tabla td.hp-libre { color: var(--texto-suave); }
+.hp-tabla td.hp-cerrado { font-style: italic; background: var(--fondo); }
+.hp h2 { margin: 0 0 6px; }
+.hp h3 { margin: 18px 0 6px; font-size: 15px; }
+.hp select { max-width: 100%; }

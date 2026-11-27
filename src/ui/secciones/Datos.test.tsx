@@ -23,21 +23,12 @@ describe('Datos', () => {
     expect(raiz.querySelector<HTMLTextAreaElement>('textarea[readonly]')!.value).toBe('');
   });
 
-  it('muestra el horario de la plantilla como primera tarjeta', async () => {
+  it('ya no incluye la importación del horario (vive en la página Horarios)', async () => {
     const almacen = crearAlmacenApp(crearEstadoEjemplo(), { guardar: () => ({ ok: true }) });
     const raiz = document.createElement('div');
     document.body.appendChild(raiz);
-    await act(() => render(<Datos almacen={almacen} alIrASemana={() => {}} />, raiz));
-    expect(raiz.querySelector('section.tarjeta h3')?.textContent).toBe('Horario de la plantilla');
-  });
-
-  it('una petición desde el Cuadrante pone la semana vista y enfoca el título del horario', async () => {
-    const almacen = crearAlmacenApp(crearEstadoEjemplo(), { guardar: () => ({ ok: true }) });
-    const raiz = document.createElement('div');
-    document.body.appendChild(raiz);
-    await act(() => render(<Datos almacen={almacen} peticionHorario={null} />, raiz));
-    await act(() => render(<Datos almacen={almacen} peticionHorario={{ lunes: '2026-12-14', nonce: 1 }} />, raiz));
-    expect(document.activeElement?.id).toBe('titulo-horario');
-    expect(raiz.textContent).toContain('Semana del 14/12/2026 al 20/12/2026');
+    await act(() => render(<Datos almacen={almacen} />, raiz));
+    expect(raiz.textContent).not.toContain('Horario de la plantilla');
+    expect(raiz.textContent).not.toContain('Pega aquí el horario');
   });
 });

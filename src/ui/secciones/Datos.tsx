@@ -6,7 +6,6 @@ import { conservarAlias } from '../../persistencia/alias';
 import { CLAVE_ILEGIBLE } from '../../arranque';
 import { exportarRespaldo, importarRespaldo } from '../../persistencia/respaldo';
 import type { FechaISO } from '../../modelo/tipos';
-import { HorarioPlantilla } from './HorarioPlantilla';
 import { Confirmacion } from '../componentes/Confirmacion';
 import { IconoCopiar, IconoExportar, IconoImportar } from '../iconos';
 
@@ -41,28 +40,7 @@ function leerClave(clave: string): string | null {
   }
 }
 
-export function Datos({
-  almacen,
-  textoIlegible,
-  alIrASemana,
-  peticionHorario = null,
-}: {
-  almacen: AlmacenApp;
-  textoIlegible?: () => string | null;
-  alIrASemana?: (lunes: FechaISO) => void;
-  /** Petición desde el Cuadrante: abrir la tarjeta del horario con esa semana y llevar el foco a su título. */
-  peticionHorario?: { lunes: FechaISO; nonce: number } | null;
-}) {
-  const tituloHorario = useRef<HTMLHeadingElement>(null);
-  const nonceAtendido = useRef<number | null>(peticionHorario?.nonce ?? null);
-  useEffect(() => {
-    if (!peticionHorario || peticionHorario.nonce === nonceAtendido.current) return;
-    nonceAtendido.current = peticionHorario.nonce;
-    const t = tituloHorario.current;
-    if (!t) return;
-    t.scrollIntoView?.({ block: 'start' });
-    t.focus();
-  }, [peticionHorario]);
+export function Datos({ almacen, textoIlegible }: { almacen: AlmacenApp; textoIlegible?: () => string | null }) {
   const [sinAlias, setSinAlias] = useState(false);
   const [copia, setCopia] = useState('');
   const [msgExportar, setMsgExportar] = useState<Mensaje | null>(null);
@@ -210,11 +188,6 @@ export function Datos({
           <Aviso mensaje={msgIlegible} />
         </section>
       )}
-
-      <section class="tarjeta" aria-labelledby="titulo-horario">
-        <h3 id="titulo-horario" ref={tituloHorario} tabIndex={-1}>Horario de la plantilla</h3>
-        <HorarioPlantilla almacen={almacen} alIrASemana={alIrASemana ?? (() => {})} peticion={peticionHorario} />
-      </section>
 
       <section class="tarjeta" aria-labelledby="titulo-exportar">
         <h3 id="titulo-exportar">Exportar</h3>

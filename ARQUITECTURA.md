@@ -668,13 +668,10 @@ asignación el martes 01/12 10:00–11:30», «EMP-07 libra según el horario de
 
 ### 13.3 Interfaz
 
-- **Datos → «Horario de la plantilla»**: semana (por defecto la siguiente), cuadro «Pega aquí el horario copiado de Excel», turnos por letra
-  editables (M, T y los que añada), «Leer horario», vista previa persona × día con el texto entendido («10:00–15:45», «Libra», error en rojo
-  con texto), errores y avisos, «Crear las N personas que faltan», «Guardar horario de la semana» (con impacto) y, tras guardar,
-  «Ir a la semana» (abre el Cuadrante). Lista de semanas con horario: personas, horas totales, «Ver y editar» (rejilla editable celda a celda
-  con `leerCelda`) y «Quitar».
+- **Página «Horarios»** (§14; antes tarjeta de Datos): pegar, «Leer horario», lo detectado con «Primer día de la tabla», semanas a guardar, vista previa de una semana,
+  avisos, personas nuevas (alias y habilitaciones) y «Guardar el horario de N semanas» (con impacto y un solo `aplicar`). Debajo, lista de semanas con horario con «Ver y editar» (rejilla con `leerCelda`) y «Quitar».
 - Rejilla «Ver y editar»: el botón pasa a «Cerrar»; cerrarla o abrir otra semana con cambios sin guardar pide confirmación; se reinicia si el horario guardado
-  cambia (guardar, deshacer, rehacer). «Importar horario» del Cuadrante abre Datos con la semana que se estaba viendo y lleva el foco al título de la tarjeta.
+  cambia (guardar, deshacer, rehacer). «Importar horario» del Cuadrante abre Horarios con la semana que se estaba viendo como primera a guardar y lleva el foco al título.
 - **Cuadrante**: aviso bajo la barra de semana: «Horario de la plantilla cargado (27 personas)» o «Esta semana no tiene horario de la
   plantilla: se puede asignar a cualquiera a cualquier hora» con botón «Importar horario». En la vista Por persona, el turno de cada día.
 - **Resumen por persona**: horas de turno junto a las horas asignadas, si hay horario.
@@ -700,3 +697,8 @@ Decisiones:
 - **Página propia «Horarios»** (pestaña entre Incidencias y Datos) con la importación; se quita de Datos.
 - Personas nuevas: se crean con el código, el alias (nombre) y las **habilitaciones elegidas** en la importación (por defecto todas las
   áreas activas), para que el generador pueda usarlas desde el primer momento.
+
+Implementación (H3): `leerCalendario` y `horariosDesdeCalendario` en `src/importar/horario.ts`; `guardarHorarios`, `impactoGuardarHorarios`,
+`ponerAliasDesdeNombres` y las opciones de `crearPersonasDesdeCodigos` en `src/edicion/horarios.ts`; interfaz en `src/ui/secciones/Horarios.tsx`.
+`leerCelda` ya no da error por texto sin horas (devuelve `codigo`); solo es error lo que parece una hora mal escrita. Las celdas con error van en
+`LecturaCalendario.celdasConError` y solo bloquean si caen en las semanas elegidas (`errores` es solo de estructura). `leerHorario` (semanal) se conserva por compatibilidad.

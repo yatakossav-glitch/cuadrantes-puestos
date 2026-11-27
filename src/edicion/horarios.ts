@@ -210,20 +210,110 @@ export function cambiarTurno(
   return guardarHorario(estado, { ...actual, turnos, actualizado: ahora === undefined ? actual.actualizado : ahora });
 }
 
-/** Crea una persona por cada código que no exista ya (comparando con `normalizarCodigo`), sin habilitaciones. */
+export interface OpcionesCrearPersonas {
+  /** Nombre por código: se guarda como alias (solo vive en este navegador). */
+  alias?: ReadonlyMap<string, string> | Readonly<Record<string, string>>;
+  /** Ids de áreas o puestos para los que quedan habilitadas las personas nuevas. */
+  habilitaciones?: readonly Id[];
+}
+
+function mapaDeAlias(alias: OpcionesCrearPersonas['alias']): Map<string, string> {
+  const r = new Map<string, string>();
+  if (!alias) return r;
+  const pares = alias instanceof Map ? [...alias] : Object.entries(alias);
+  for (const [codigo, nombre] of pares) if (nombre.trim() !== '') r.set(normalizarCodigo(codigo), nombre.trim());
+  return r;
+}
+
+/** 'EMP 7' → 'EMP-07'; los códigos alfanuméricos sin separadores (10000001, A1234B) se respetan en mayúsculas. */
+function codigoParaCrear(texto: string): string {
+  const t = texto.trim();
+  return /^emp/i.test(t) || !/^[\p{L}\d]+$/u.test(t) ? codigoCanonico(t) : t.toUpperCase();
+}
+
+/** Crea una persona por cada código que no exista ya (comparando con `normalizarCodigo`); con alias y habilitaciones si se indican. */
 export function crearPersonasDesdeCodigos(
   estado: EstadoApp,
   codigos: readonly string[],
   ids: () => Id = () => nuevoId('per'),
+  opciones: OpcionesCrearPersonas = {},
 ): EstadoApp {
   let resultado = estado;
+  const alias = mapaDeAlias(opciones.alias);
   const vistos = new Set(estado.personas.map((p) => normalizarCodigo(p.codigo)));
   for (const texto of codigos) {
-    const codigo = codigoCanonico(texto);
+    const codigo = codigoParaCrear(texto);
     const clave = normalizarCodigo(codigo);
     if (!clave || vistos.has(clave)) continue;
     vistos.add(clave);
-    resultado = anadirPersona(resultado, { ...crearPersona(resultado, ids), codigo });
+    resultado = anadirPersona(resultado, {
+      ...crearPersona(resultado, ids),
+      codigo,
+      alias: alias.get(clave) ?? null,
+      habilitaciones: [...(opciones.habilitaciones ?? [])],
+    });
   }
   return resultado;
+}
+
+/** Pone como alias el nombre de las personas existentes que aún no tienen alias. Devuelve el mismo estado si no cambia nada. */
+export function ponerAliasDesdeNombres(estado: EstadoApp, nombres: OpcionesCrearPersonas['alias']): EstadoApp {
+  const alias = mapaDeAlias(nombres);
+  let cambia = false;
+  const personas = estado.personas.map((p) => {
+    const nombre = alias.get(normalizarCodigo(p.codigo));
+    if (nombre === undefined || (p.alias !== null && p.alias.trim() !== '')) return p;
+    cambia = true;
+    return { ...p, alias: nombre };
+  });
+  return cambia ? { ...estado, personas } : estado;
+}
+
+// ───────────────────────── Varias semanas a la vez (§14) ─────────────────────────
+
+/** Guarda (o reemplaza) varias semanas de horario en un solo paso. */
+export function guardarHorarios(estado: EstadoApp, horarios: readonly HorarioSemana[]): EstadoApp {
+  if (horarios.length === 0) return estado;
+  const nuevos = { ...estado.horarios };
+  for (const h of horarios) nuevos[h.lunes] = h;
+  return { ...estado, horarios: nuevos };
+}
+
+export function impactoGuardarHorarios(estado: EstadoApp, horarios: readonly HorarioSemana[]): Impacto {
+  const efectos: string[] = [];
+  const reemplazadas = horarios.filter((h) => estado.horarios[h.lunes] !== undefined).length;
+  const nuevas = horarios.length - reemplazadas;
+  if (nuevas > 0) efectos.push(`Guardará ${cuenta(nuevas, 'semana nueva', 'semanas nuevas')} de horario`);
+  if (reemplazadas > 0) efectos.push(`Reemplazará el horario de ${cuenta(reemplazadas, 'semana que ya lo tenía', 'semanas que ya lo tenían')}`);
+
+  const datos: DatosPlanificacion = guardarHorarios(estado, horarios);
+  const ejemplos: string[] = [];
+  let nFuera = 0;
+  for (const h of horarios) {
+    for (const a of estado.cuadrantes[h.lunes]?.asignaciones ?? []) {
+      if (a.tipo !== 'puesto') continue;
+      const iv = intervaloAsignacion(estado, a.puestoId, a.fecha, a.franjaId);
+      if (!iv || enTurno(datos, a.personaId, a.fecha, iv)) continue;
+      nFuera += 1;
+      const codigo = estado.personas.find((p) => p.id === a.personaId)?.codigo ?? 'Una persona';
+      const ejemplo = `${codigo} ${NOMBRES_DIA[diaSemana(a.fecha)]} ${diaMes(a.fecha)}`;
+      if (ejemplos.length < 3 && !ejemplos.includes(ejemplo)) ejemplos.push(ejemplo);
+    }
+  }
+  if (nFuera > 0) {
+    efectos.push(
+      `${cuenta(nFuera, 'asignación ya hecha queda', 'asignaciones ya hechas quedan')} fuera de turno (${ejemplos.join(', ')}${
+        nFuera > ejemplos.length ? '…' : ''
+      }): puedes recubrirlas desde el Cuadrante`,
+    );
+  }
+
+  const figuran = new Set(horarios.flatMap((h) => h.turnos.map((t) => t.personaId)));
+  const sinHorario = estado.personas.filter((p) => p.activa && !figuran.has(p.id)).length;
+  if (sinHorario > 0) {
+    efectos.push(
+      `${cuenta(sinHorario, 'persona activa no figura y no trabajará', 'personas activas no figuran y no trabajarán')} en esas semanas`,
+    );
+  }
+  return { bloqueos: [], efectos };
 }

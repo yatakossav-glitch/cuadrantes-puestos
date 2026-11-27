@@ -11,11 +11,13 @@ import {
   IconoPersona,
   IconoPuesto,
   IconoRehacer,
+  IconoReloj,
   IconoReglas,
   IconoRotacion,
   type PropsIcono,
 } from './iconos';
 import { Datos } from './secciones/Datos';
+import { Horarios } from './secciones/Horarios';
 import { Personas } from './secciones/Personas';
 import { Puestos } from './secciones/Puestos';
 import { Reglas } from './secciones/Reglas';
@@ -30,7 +32,7 @@ import { resumirSemana } from '../validacion/resumen';
 import { hoyISO, lunesDe } from '../modelo/fechas';
 import type { ClaveHueco, FechaISO, Id } from '../modelo/tipos';
 
-type IdSeccion = 'cuadrante' | 'personas' | 'puestos' | 'reglas' | 'rotacion' | 'incidencias' | 'datos';
+type IdSeccion = 'cuadrante' | 'personas' | 'puestos' | 'reglas' | 'rotacion' | 'incidencias' | 'horarios' | 'datos';
 
 const SECCIONES: { id: IdSeccion; titulo: string; Icono: (p: PropsIcono) => JSX.Element }[] = [
   { id: 'cuadrante', titulo: 'Cuadrante', Icono: IconoCuadrante },
@@ -39,6 +41,7 @@ const SECCIONES: { id: IdSeccion; titulo: string; Icono: (p: PropsIcono) => JSX.
   { id: 'reglas', titulo: 'Reglas', Icono: IconoReglas },
   { id: 'rotacion', titulo: 'Rotación', Icono: IconoRotacion },
   { id: 'incidencias', titulo: 'Incidencias', Icono: IconoCalendario },
+  { id: 'horarios', titulo: 'Horarios', Icono: IconoReloj },
   { id: 'datos', titulo: 'Datos', Icono: IconoExportar },
 ];
 
@@ -231,7 +234,7 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
               <div>
                 <Cuadrante almacen={almacen} resultado={validacion.resultado} foco={foco} alCambiarSemana={setLunes} peticion={peticion} alImportarHorario={(l) => {
                   setPeticionHorario({ lunes: l, nonce: Date.now() });
-                  setSeccion('datos');
+                  setSeccion('horarios');
                 }} />
                 <PanelValidacion
                   resultado={validacion.resultado}
@@ -242,7 +245,9 @@ export function App({ almacen, avisosCarga = [], avisoArranque = null, textoIleg
                 />
               </div>
             ) : s.id === 'datos' ? (
-              <Datos almacen={almacen} textoIlegible={textoIlegible} alIrASemana={(l) => irASemana(l, false)} peticionHorario={peticionHorario} />
+              <Datos almacen={almacen} textoIlegible={textoIlegible} />
+            ) : s.id === 'horarios' ? (
+              <Horarios almacen={almacen} alIrASemana={(l) => irASemana(l, false)} peticion={peticionHorario} />
             ) : s.id === 'personas' ? (
               <Personas almacen={almacen} />
             ) : s.id === 'puestos' ? (

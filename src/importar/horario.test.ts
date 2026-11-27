@@ -22,6 +22,32 @@ describe('letrasPorDefecto', () => {
   });
 });
 
+describe('leerCelda · horas con espacios y códigos', () => {
+  it('«HH:MM HH:MM» con uno o varios espacios', () => {
+    expect(leerCelda('15:20 22:10', letras).tramos).toEqual([t('15:20', '22:10')]);
+    expect(leerCelda('  15:20    22:10 ', letras)).toMatchObject({ libre: false, error: null, tramos: [t('15:20', '22:10')] });
+  });
+  it('combinación partida: dos tramos', () => {
+    expect(leerCelda('08:30 14:00 17:00 21:00', letras).tramos).toEqual([t('08:30', '14:00'), t('17:00', '21:00')]);
+    expect(leerCelda('08:30 14:00 / 17:00 21:00', letras).tramos).toHaveLength(2);
+  });
+  it('texto sin horas: libre y con su código', () => {
+    for (const [s, c] of [['L  ', 'L'], ['V', 'V'], ['V7R', 'V7R'], ['vks', 'VKS'], ['xx', 'XX'], ['baja médica', 'BAJAMÉDICA']] as const) {
+      expect(leerCelda(s, letras)).toMatchObject({ libre: true, tramos: [], error: null, codigo: c });
+    }
+    expect(leerCelda('   ', letras).codigo).toBeUndefined();
+  });
+  it('horas mal escritas son error', () => {
+    for (const s of ['15:2O 22:10', '25:00 26:00', '22:10 15:20', '15:20', '15:20 22:10 17:00']) {
+      expect(leerCelda(s, letras).error, s).not.toBeNull();
+    }
+  });
+  it('las letras de turno definidas siguen valiendo', () => {
+    expect(leerCelda('M', letras).tramos).toEqual(M);
+    expect(leerCelda('m', letras).codigo).toBeUndefined();
+  });
+});
+
 describe('leerCelda', () => {
   const tramos = (s: string) => leerCelda(s, letras).tramos;
   it.each(['', '  ', 'L', 'l', 'libre', 'Descanso', 'D', 'fiesta', 'Vacaciones', 'vac', 'BAJA', '-', '—', '–'])('«%s» es libre', (s) => {
@@ -55,13 +81,13 @@ describe('leerCelda', () => {
     expect(c.tramos).toHaveLength(2);
   });
   it('errores legibles', () => {
-    expect(leerCelda('xx', letras).error).toBe('No entiendo "xx": escribe un horario como 10:00-15:45, M, T o L');
+    expect(leerCelda('10:3O 12', letras).error).toBe('No entiendo "10:3O 12": escribe un horario como 10:00-15:45, M, T o L');
     expect(leerCelda('15:45-10:00', letras).error).toContain('no es posterior');
     expect(leerCelda('10-25', letras).error).toContain('entre 00:00 y 24:00');
     expect(leerCelda('10:75-12', letras).error).toContain('no es válida');
     expect(leerCelda('10-14 y 12-16', letras).error).toContain('se solapan');
     expect(leerCelda('M+xx', letras).error).toContain('No entiendo');
-    expect(leerCelda('xx', letras).tramos).toEqual([]);
+    expect(leerCelda('10:3O 12', letras).tramos).toEqual([]);
   });
 });
 
@@ -187,8 +213,8 @@ describe('leerHorario · formatos de tabla', () => {
   });
 
   it('errores con persona y día', () => {
-    const l = leerHorario(['Código\tLun\tMar\tMié\tJue\tVie\tSáb\tDom', 'EMP-07\tM\tzzz\tM\tM\tM\tL\tL'].join('\n'), LUNES, datos, letras);
-    expect(l.errores).toEqual(['EMP-07 el martes: No entiendo "zzz": escribe un horario como 10:00-15:45, M, T o L']);
+    const l = leerHorario(['Código\tLun\tMar\tMié\tJue\tVie\tSáb\tDom', 'EMP-07\tM\t10:3O 12\tM\tM\tM\tL\tL'].join('\n'), LUNES, datos, letras);
+    expect(l.errores).toEqual(['EMP-07 el martes: No entiendo "10:3O 12": escribe un horario como 10:00-15:45, M, T o L']);
     expect(l.filas[0]?.dias[1]?.error).not.toBeNull();
   });
 

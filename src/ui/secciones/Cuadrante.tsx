@@ -69,7 +69,7 @@ export interface PropsCuadrante {
   /** Petición externa de ir a una semana y, si `recubrir`, lanzar «Completar huecos». */
   peticion?: { lunes: FechaISO; recubrir: boolean; nonce: number } | null;
   /** Abre la importación del horario de la plantilla (Datos). */
-  /** Abre Datos para importar el horario de la semana indicada (la que se está viendo). */
+  /** Abre Horarios para importar el horario de la semana indicada (la que se está viendo). */
   alImportarHorario?: (lunes: FechaISO) => void;
 }
 

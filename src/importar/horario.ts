@@ -2,9 +2,9 @@
  * Lectura del horario semanal pegado desde Excel (§13.1). Funciones puras: texto → lectura.
  * No modifica datos; `edicion/horarios.ts` convierte la lectura en un `HorarioSemana`.
  */
-import { NOMBRES_DIA, esFechaISO, lunesDe, sumarDias } from '../modelo/fechas';
+import { NOMBRES_DIA, esFechaISO, hoyISO, lunesDe, sumarDias } from '../modelo/fechas';
 import { aHora } from '../modelo/horas';
-import type { DatosPlanificacion, FechaISO, Id, Intervalo } from '../modelo/tipos';
+import type { DatosPlanificacion, FechaISO, HorarioSemana, Id, Intervalo, TurnoDia } from '../modelo/tipos';
 import { normalizarCodigo } from '../persistencia/coherencia';
 
 // ───────────────────────── Tipos públicos ─────────────────────────
@@ -20,6 +20,8 @@ export interface CeldaLeida {
   tramos: Intervalo[];
   libre: boolean;
   error: string | null;
+  /** Texto sin horas leído (mayúsculas y sin espacios): «L», «V7R»… Solo en celdas libres con texto; sirve para resumirlos. */
+  codigo?: string;
 }
 
 export interface FilaLeida {
@@ -130,6 +132,25 @@ function unir(tramos: Intervalo[]): Intervalo[] | null {
   return resultado;
 }
 
+const TOKEN_HORA = String.raw`\d{1,2}[:.]\d{2}`;
+/** Varias horas sueltas separadas por espacios: «15:20 22:10» o «08:30 14:00 17:00 21:00» (entrada, salida, entrada, salida…). */
+const PATRON_HORAS_SUELTAS = new RegExp(String.raw`^${TOKEN_HORA}(?:\s+${TOKEN_HORA})+$`);
+/** ¿Tiene pinta de una hora o tramo mal escrito? (dígitos junto a «:», dígitos con guion o «12h»). */
+const PARECE_HORA = /\d\s*:|:\s*\d|\d\s*[-–—]\s*\d|\d\s*h(?![\p{L}])/u;
+
+function aMinTexto(token: string): number | null {
+  const m = /^(\d{1,2})[:.](\d{2})$/.exec(token);
+  return m ? aMin(m[1], m[2]) : null;
+}
+
+const codigoDeTexto = (original: string): string => original.toUpperCase().replace(/\s+/g, '');
+
+function celdaSinHoras(original: string): CeldaLeida {
+  const c = celda(original, [], true, null);
+  if (original !== '') c.codigo = codigoDeTexto(original);
+  return c;
+}
+
 export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): CeldaLeida {
   const original = texto.trim().replace(/^"(.*)"$/s, '$1').trim();
   const norm = normalizarTexto(original);
@@ -140,18 +161,40 @@ export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): Celd
     porLetra.set(normalizarTexto(l.nombre), l);
   }
 
-  if (!porLetra.has(norm) && (PALABRAS_LIBRE.has(norm) || PATRON_LIBRE_PREFIJO.test(norm))) return celda(original, [], true, null);
+  if (!porLetra.has(norm) && (PALABRAS_LIBRE.has(norm) || PATRON_LIBRE_PREFIJO.test(norm))) return celdaSinHoras(original);
 
   const partes = norm.split(/\s*[/+,;]\s*|\s+y\s+/).filter((p) => p !== '');
   const tramos: Intervalo[] = [];
+  let noEntendida: string | null = null;
   for (const parte of partes) {
     const turno = porLetra.get(parte);
     if (turno) {
       tramos.push(...turno.tramos);
       continue;
     }
+    if (PATRON_HORAS_SUELTAS.test(parte)) {
+      const horas = parte.split(' ').map(aMinTexto);
+      if (horas.length % 2 !== 0) {
+        return celda(original, [], false, `En "${original}" falta una hora: cada tramo necesita entrada y salida`);
+      }
+      for (let i = 0; i < horas.length; i += 2) {
+        const inicio = horas[i] ?? null;
+        const fin = horas[i + 1] ?? null;
+        if (inicio === null || fin === null) {
+          return celda(original, [], false, `La hora de "${parte}" no es válida: debe estar entre 00:00 y 24:00`);
+        }
+        if (fin <= inicio) {
+          return celda(original, [], false, `El tramo "${aHora(inicio)} ${aHora(fin)}" no es válido: ${aHora(fin)} no es posterior a ${aHora(inicio)}`);
+        }
+        tramos.push({ inicio, fin });
+      }
+      continue;
+    }
     const m = PATRON_TRAMO.exec(parte);
-    if (!m) return celda(original, [], false, mensajeNoEntiendo(original));
+    if (!m) {
+      noEntendida = parte;
+      continue;
+    }
     const inicio = aMin(m[1], m[2]);
     const fin = aMin(m[3], m[4]);
     if (inicio === null || fin === null) {
@@ -162,7 +205,12 @@ export function leerCelda(texto: string, letras: readonly TurnoConLetra[]): Celd
     }
     tramos.push({ inicio, fin });
   }
-  if (tramos.length === 0) return celda(original, [], false, mensajeNoEntiendo(original));
+  if (noEntendida !== null) {
+    // Sin ninguna hora entendida y sin pinta de hora mal escrita: es un código (L, V7R…) y ese día no trabaja.
+    if (tramos.length === 0 && !PARECE_HORA.test(norm)) return celdaSinHoras(original);
+    return celda(original, [], false, mensajeNoEntiendo(original));
+  }
+  if (tramos.length === 0) return celdaSinHoras(original);
   const unidos = unir(tramos);
   if (!unidos) return celda(original, [], false, `Los tramos de "${original}" se solapan`);
   return celda(original, unidos, false, null);
@@ -469,4 +517,351 @@ export function leerHorario(
     lectura.avisos.push(`Personas activas que no figuran en el horario (no trabajarán esa semana): ${lista}`);
   }
   return lectura;
+}
+
+// ───────────────────────── Calendario anual (§14) ─────────────────────────
+
+export interface FilaCalendario {
+  linea: number;
+  codigo: string;
+  /** Nombre de la columna de nombres, si la hay. Solo se usa como alias (nunca se guarda sin que la usuaria lo elija). */
+  nombre: string | null;
+  personaId: Id | null;
+  dias: Map<FechaISO, CeldaLeida>;
+}
+
+export interface LecturaCalendario {
+  filas: FilaCalendario[];
+  primerDia: FechaISO | null;
+  ultimoDia: FechaISO | null;
+  /** Lunes de las semanas completas (lunes a domingo dentro de la tabla). */
+  semanas: FechaISO[];
+  /** Lunes de las semanas que la tabla solo cubre en parte. */
+  semanasParciales: FechaISO[];
+  /** Días cuya columna está vacía para todas las personas (día sin abrir). */
+  diasCerrados: FechaISO[];
+  /** Texto sin horas de las celdas (L, V, V7R…) y cuántas veces aparece, de más a menos. */
+  codigosSinHorario: { codigo: string; veces: number }[];
+  columnas: string;
+  /** Bloquean cualquier guardado: estructura de la tabla. */
+  errores: string[];
+  /** Celdas con una hora mal escrita; bloquean solo si caen en las semanas a guardar. */
+  celdasConError: { codigo: string; fecha: FechaISO; mensaje: string }[];
+  avisos: string[];
+  codigosDesconocidos: { codigo: string; nombre: string | null }[];
+}
+
+export interface OpcionesCalendario {
+  primerDia: FechaISO | null;
+  /** Fecha de hoy (para proponer el año y la semana por defecto). Por defecto, la del reloj. */
+  hoy?: FechaISO;
+}
+
+const esCodigoPlausible = (t: string): boolean =>
+  /^\d{4,12}$/.test(t) ||
+  (/^[\p{L}\d]{3,16}$/u.test(t) && /\p{L}/u.test(t) && /\d/.test(t)) ||
+  /^emp[\s_.-]*\d+$/i.test(t);
+
+const PATRON_NOMBRE = /^\p{L}[\p{L}\s.'’·,-]*$/u;
+/** Nombre con espacios y algún dígito suelto («PERSONA 1»): empieza por letra y no tiene ':' (no es una hora). */
+const PATRON_NOMBRE_CON_DIGITOS = /^\p{L}[\p{L}\d.'’·,-]*\s[\p{L}\d\s.'’·,-]*$/u;
+
+function pareceNombre(t: string): boolean {
+  const simple = PATRON_NOMBRE.test(t) && (/\s/.test(t) || t.length >= 4);
+  if (!simple && !PATRON_NOMBRE_CON_DIGITOS.test(t)) return false;
+  const n = normalizarTexto(t);
+  return !PALABRAS_LIBRE.has(n) && !PATRON_LIBRE_PREFIJO.test(n);
+}
+
+const f2 = (n: number) => String(n).padStart(2, '0');
+const corto = (f: FechaISO) => `${f.slice(8, 10)}/${f.slice(5, 7)}`;
+const largo = (f: FechaISO) => `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`;
+const lista = (xs: readonly string[], max = 6) => (xs.length > max ? `${xs.slice(0, max).join(', ')}… (${xs.length} en total)` : xs.join(', '));
+
+/** «Códigos sin horario: L (412), V (96)…: esos días no trabaja» (null si no hay). */
+export function resumirCodigosSinHorario(codigos: readonly { codigo: string; veces: number }[], max = 8): string | null {
+  if (codigos.length === 0) return null;
+  const texto = codigos.slice(0, max).map((c) => `${c.codigo} (${c.veces})`).join(', ');
+  return `Códigos sin horario: ${texto}${codigos.length > max ? '…' : ''}: esos días no trabaja`;
+}
+
+/** Fecha de una celda de cabecera: ISO, dd/mm/aaaa o dd/mm (año por referencia), con nombre de día opcional delante. */
+function fechaDeCabecera(texto: string, anio: { valor: number; mes: number }): FechaISO | null {
+  const norm = normalizarTexto(texto).replace(/^[a-z]+\.?[\s,]+(?=\d)/, '');
+  const iso = PATRON_FECHA_ISO.exec(norm);
+  let a: number;
+  let m: number;
+  let d: number;
+  if (iso) {
+    a = Number(iso[1]);
+    m = Number(iso[2]);
+    d = Number(iso[3]);
+  } else {
+    const x = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/.exec(norm);
+    if (!x) return null;
+    d = Number(x[1]);
+    m = Number(x[2]);
+    if (x[3] === undefined) {
+      if (m < anio.mes) anio.valor += 1;
+      a = anio.valor;
+    } else a = Number(x[3]) < 100 ? 2000 + Number(x[3]) : Number(x[3]);
+  }
+  const f = `${a}-${f2(m)}-${f2(d)}`;
+  if (!esFechaISO(f)) return null;
+  anio.mes = m;
+  return f;
+}
+
+function descripcionColumnas(col: number, nombre: number | null, dias: number[], conFechas: boolean): string {
+  const partes = [`Código en la columna ${col + 1}`];
+  if (nombre !== null) partes.push(`nombre en la columna ${nombre + 1}`);
+  if (dias.length === 0) partes.push('sin columnas de días');
+  else {
+    const a = Math.min(...dias);
+    const b = Math.max(...dias);
+    partes.push(
+      `${dias.length} ${dias.length === 1 ? 'día' : 'días'} en ${a === b ? `la columna ${a + 1}` : `las columnas ${a + 1} a ${b + 1}`}${conFechas ? ' (fechas de la cabecera)' : ''}`,
+    );
+  }
+  return partes.join('; ');
+}
+
+export function leerCalendario(
+  texto: string,
+  datos: DatosPlanificacion,
+  letras: readonly TurnoConLetra[],
+  opciones: OpcionesCalendario,
+): LecturaCalendario {
+  const hoy = opciones.hoy ?? hoyISO();
+  const lectura: LecturaCalendario = {
+    filas: [], primerDia: null, ultimoDia: null, semanas: [], semanasParciales: [], diasCerrados: [],
+    codigosSinHorario: [], columnas: '', errores: [], celdasConError: [], avisos: [], codigosDesconocidos: [],
+  };
+  const lineas: { linea: number; texto: string }[] = [];
+  partirLineas(texto).forEach((t, i) => {
+    if (t.replace(/[\t;,\s]/g, '') !== '') lineas.push({ linea: i + 1, texto: t });
+  });
+  if (lineas.length === 0) {
+    lectura.errores.push('No hay nada que leer: pega el horario copiado de Excel');
+    return lectura;
+  }
+  const separador = elegirSeparador(lineas.map((l) => l.texto));
+  const tabla = lineas.map((l) => ({ linea: l.linea, celdas: separarLinea(l.texto, separador) }));
+
+  // Cabecera (opcional): fechas o nombres de día en una de las primeras filas.
+  const anioRef = Number((opciones.primerDia ?? hoy).slice(0, 4));
+  const columnaFecha = new Map<number, FechaISO>();
+  const columnaNombreDia = new Map<number, number>();
+  let filaCabecera = -1;
+  for (let i = 0; i < Math.min(tabla.length, 3) && filaCabecera < 0; i++) {
+    const ref = { valor: anioRef, mes: 0 };
+    const fechas = new Map<number, FechaISO>();
+    const nombres = new Map<number, number>();
+    tabla[i]!.celdas.forEach((c, col) => {
+      const f = fechaDeCabecera(c, ref);
+      if (f !== null) fechas.set(col, f);
+      else {
+        const n = normalizarTexto(c);
+        const d = n.length >= 2 ? DIAS_POR_NOMBRE[n] : undefined;
+        if (d !== undefined && PATRON_CABECERA_NOMBRE.test(n)) nombres.set(col, d);
+      }
+    });
+    if (fechas.size >= 2) {
+      filaCabecera = i;
+      fechas.forEach((f, c) => columnaFecha.set(c, f));
+    } else if (nombres.size >= 2) {
+      filaCabecera = i;
+      nombres.forEach((d, c) => columnaNombreDia.set(c, d));
+    }
+  }
+  const columnasCabecera = new Set([...columnaFecha.keys(), ...columnaNombreDia.keys()]);
+  const filasDatos = (filaCabecera >= 0 ? tabla.slice(filaCabecera + 1) : tabla).filter((f) => f.celdas.some((c) => c !== ''));
+  const ancho = Math.max(0, ...tabla.map((f) => f.celdas.length));
+  const existentes = new Map(datos.personas.map((p) => [normalizarCodigo(p.codigo), p]));
+
+  // Columna de códigos: la que más coincide con personas existentes; si no, la primera casi completa de códigos plausibles; si no, la de más valores distintos.
+  let colCodigo = -1;
+  let mejor = 0;
+  for (let c = 0; c < ancho; c++) {
+    if (columnasCabecera.has(c)) continue;
+    const aciertos = filasDatos.filter((f) => existentes.has(normalizarCodigo(f.celdas[c] ?? ''))).length;
+    if (aciertos > mejor) {
+      mejor = aciertos;
+      colCodigo = c;
+    }
+  }
+  if (colCodigo < 0) {
+    let distintosMax = 0;
+    for (let c = 0; c < ancho; c++) {
+      if (columnasCabecera.has(c)) continue;
+      const plausibles = filasDatos.map((f) => (f.celdas[c] ?? '').trim()).filter(esCodigoPlausible);
+      if (plausibles.length >= Math.max(1, 0.8 * filasDatos.length)) {
+        colCodigo = c;
+        break;
+      }
+      const distintos = new Set(plausibles).size;
+      if (distintos > distintosMax) {
+        distintosMax = distintos;
+        colCodigo = c;
+      }
+    }
+  }
+  if (colCodigo < 0) {
+    lectura.errores.push('No encuentro la columna con los números o códigos de las personas');
+    return lectura;
+  }
+
+  // Columna de nombres (opcional): contigua al código.
+  const esColNombre = (c: number): boolean => {
+    if (c < 0 || c >= ancho || columnasCabecera.has(c)) return false;
+    const vals = filasDatos.map((f) => (f.celdas[c] ?? '').trim()).filter((v) => v !== '');
+    return vals.length > 0 && vals.filter(pareceNombre).length >= 0.6 * vals.length;
+  };
+  let colNombre: number | null = null;
+  if (esColNombre(colCodigo + 1)) colNombre = colCodigo + 1;
+  else if (esColNombre(colCodigo - 1)) colNombre = colCodigo - 1;
+  const primeraColDia = Math.max(colCodigo, colNombre ?? -1) + 1;
+
+  // Columna → fecha.
+  const fechaDeColumna = new Map<number, FechaISO>();
+  let conFechas = false;
+  if (columnaFecha.size > 0) {
+    columnaFecha.forEach((f, c) => fechaDeColumna.set(c, f));
+    conFechas = true;
+  } else {
+    const columnasDia: number[] = [];
+    if (columnaNombreDia.size > 0) columnaNombreDia.forEach((_, c) => columnasDia.push(c));
+    else for (let c = primeraColDia; c < ancho; c++) columnasDia.push(c);
+    if (columnasDia.length === 0) {
+      lectura.errores.push('No encuentro las columnas de los días: tras el código y el nombre debe haber una columna por cada día');
+      return lectura;
+    }
+    if (columnaNombreDia.size > 0 || columnasDia.length <= 7) {
+      // Formato semanal: lunes a domingo.
+      let lunes: FechaISO;
+      if (opciones.primerDia !== null && esFechaISO(opciones.primerDia)) lunes = lunesDe(opciones.primerDia);
+      else {
+        lunes = sumarDias(lunesDe(hoy), 7);
+        lectura.avisos.push(`No has indicado el primer día: se toma la semana que viene (del ${largo(lunes)} al ${largo(sumarDias(lunes, 6))})`);
+      }
+      columnasDia.forEach((c, i) => fechaDeColumna.set(c, sumarDias(lunes, columnaNombreDia.get(c) ?? i)));
+    } else {
+      let primero = opciones.primerDia;
+      if (primero === null || !esFechaISO(primero)) {
+        if (columnasDia.length === 365 || columnasDia.length === 366) {
+          primero = `${hoy.slice(0, 4)}-01-01`;
+          lectura.avisos.push(`Se ha supuesto que la tabla empieza el ${largo(primero)}. Si no es así, cambia el primer día de la tabla`);
+        } else {
+          lectura.errores.push('Indica el primer día de la tabla');
+          return lectura;
+        }
+      }
+      columnasDia.forEach((c, i) => fechaDeColumna.set(c, sumarDias(primero as FechaISO, i)));
+    }
+  }
+  const columnasDia = [...fechaDeColumna.keys()].sort((a, b) => a - b);
+  lectura.columnas = descripcionColumnas(colCodigo, colNombre, columnasDia, conFechas);
+
+  // Filas.
+  const memoria = new Map<string, CeldaLeida>();
+  const leer = (t: string): CeldaLeida => {
+    let c = memoria.get(t);
+    if (!c) {
+      c = leerCelda(t, letras);
+      memoria.set(t, c);
+    }
+    return c;
+  };
+  const repetidos = new Map<string, number[]>();
+  const conteo = new Map<string, number>();
+  const desconocidos = new Map<string, string | null>();
+  const vacioPorFecha = new Map<FechaISO, boolean>();
+  let ignoradas = 0;
+  for (const fila of filasDatos) {
+    const bruto = (fila.celdas[colCodigo] ?? '').trim();
+    if (bruto === '') continue;
+    const clave = normalizarCodigo(bruto);
+    const persona = existentes.get(clave);
+    if (!persona && !esCodigoPlausible(bruto)) {
+      ignoradas += 1;
+      continue;
+    }
+    const codigo = persona ? persona.codigo : /^emp/i.test(bruto) ? codigoCanonico(bruto) : bruto.toUpperCase().replace(/\s+/g, '');
+    const nombreBruto = colNombre === null ? '' : (fila.celdas[colNombre] ?? '').trim();
+    const nombre = nombreBruto === '' ? null : nombreBruto;
+    const dias = new Map<FechaISO, CeldaLeida>();
+    for (const c of columnasDia) {
+      const fecha = fechaDeColumna.get(c) as FechaISO;
+      const cel = leer(fila.celdas[c] ?? '');
+      dias.set(fecha, cel);
+      if (cel.error !== null) lectura.celdasConError.push({ codigo, fecha, mensaje: cel.error });
+      else if (cel.codigo !== undefined) conteo.set(cel.codigo, (conteo.get(cel.codigo) ?? 0) + 1);
+      if (cel.texto !== '') vacioPorFecha.set(fecha, false);
+      else if (!vacioPorFecha.has(fecha)) vacioPorFecha.set(fecha, true);
+    }
+    lectura.filas.push({ linea: fila.linea, codigo, nombre, personaId: persona ? persona.id : null, dias });
+    repetidos.set(clave, [...(repetidos.get(clave) ?? []), fila.linea]);
+    if (!persona && !desconocidos.has(codigo)) desconocidos.set(codigo, nombre);
+  }
+  if (lectura.filas.length === 0) {
+    lectura.errores.push('No hay ninguna fila con el número o código de una persona');
+    return lectura;
+  }
+  if (ignoradas > 0) lectura.avisos.push(`Se han ignorado ${ignoradas} ${ignoradas === 1 ? 'línea' : 'líneas'} cuyo primer dato no parece un número o código de persona`);
+  for (const [clave, ls] of repetidos) {
+    if (ls.length > 1) {
+      const codigo = existentes.get(clave)?.codigo ?? lectura.filas.find((f) => f.linea === ls[0])?.codigo ?? clave;
+      lectura.avisos.push(`${codigo} aparece ${ls.length} veces (líneas ${ls.join(', ')}): se usa la última`);
+    }
+  }
+
+  // Fechas, semanas y días cerrados.
+  const fechas = [...new Set(fechaDeColumna.values())].sort();
+  const presentes = new Set(fechas);
+  lectura.primerDia = fechas[0] ?? null;
+  lectura.ultimoDia = fechas[fechas.length - 1] ?? null;
+  const lunesVistos = [...new Set(fechas.map(lunesDe))];
+  for (const l of lunesVistos) {
+    (Array.from({ length: 7 }, (_, i) => sumarDias(l, i)).every((d) => presentes.has(d)) ? lectura.semanas : lectura.semanasParciales).push(l);
+  }
+  lectura.diasCerrados = fechas.filter((f) => vacioPorFecha.get(f) === true);
+  lectura.codigosSinHorario = [...conteo].map(([codigo, veces]) => ({ codigo, veces })).sort((a, b) => b.veces - a.veces || a.codigo.localeCompare(b.codigo));
+  lectura.codigosDesconocidos = [...desconocidos].map(([codigo, nombre]) => ({ codigo, nombre }));
+
+  if (lectura.semanasParciales.length > 0) {
+    lectura.avisos.push(`Semanas incompletas en la tabla (no se pueden guardar): ${lista(lectura.semanasParciales.map((l) => `la del ${corto(l)}`))}`);
+  }
+  if (lectura.diasCerrados.length > 0) {
+    lectura.avisos.push(`Días sin ningún horario (se toman como cerrados): ${lista(lectura.diasCerrados.map(corto))}`);
+  }
+  const resumen = resumirCodigosSinHorario(lectura.codigosSinHorario);
+  if (resumen) lectura.avisos.push(resumen);
+  if (lectura.codigosDesconocidos.length > 0) {
+    lectura.avisos.push(`Personas que no existen en la plantilla: ${lista(lectura.codigosDesconocidos.map((c) => c.codigo))}. Puedes crearlas o se ignorarán`);
+  }
+  return lectura;
+}
+
+/** Semanas completas de la lectura entre `desdeLunes` y `hastaLunes` (ambos incluidos) como horarios; solo personas ya existentes (la última fila gana). */
+export function horariosDesdeCalendario(
+  lectura: LecturaCalendario,
+  desdeLunes: FechaISO,
+  hastaLunes: FechaISO,
+  ahora: string | null = null,
+): HorarioSemana[] {
+  const porPersona = new Map<Id, FilaCalendario>();
+  for (const f of lectura.filas) if (f.personaId !== null) porPersona.set(f.personaId, f);
+  return lectura.semanas
+    .filter((l) => l >= desdeLunes && l <= hastaLunes)
+    .map((lunes) => {
+      const turnos: TurnoDia[] = [];
+      for (const [personaId, fila] of porPersona) {
+        for (let i = 0; i < 7; i++) {
+          const fecha = sumarDias(lunes, i);
+          const c = fila.dias.get(fecha);
+          turnos.push({ personaId, fecha, tramos: c && c.error === null ? c.tramos.map((t) => ({ inicio: t.inicio, fin: t.fin })) : [] });
+        }
+      }
+      return { lunes, turnos, actualizado: ahora };
+    });
 }

@@ -5,7 +5,7 @@ import type { EstadoApp, HorarioSemana, Intervalo } from '../modelo/tipos';
 import { leerHorario, letrasPorDefecto } from '../importar/horario';
 import {
   cambiarTurno, crearPersonasDesdeCodigos, describirTurno, enTurno, figuraEnHorario, guardarHorario, horarioDesdeLectura,
-  impactoGuardarHorario, minutosDeTurno, quitarHorario, semanaConHorario, turnoDe,
+  guardarHorarios, impactoGuardarHorario, impactoGuardarHorarios, minutosDeTurno, ponerAliasDesdeNombres, quitarHorario, semanaConHorario, turnoDe,
 } from './horarios';
 
 const LUNES = '2026-11-30';
@@ -180,5 +180,55 @@ describe('crearPersonasDesdeCodigos', () => {
     expect(nuevas.map((p) => p.id)).toEqual(['nueva-1', 'nueva-2']);
     expect(nuevas[0]).toMatchObject({ habilitaciones: [], activa: true, alias: null });
     expect(e.personas).toHaveLength(29);
+  });
+});
+
+describe('crearPersonasDesdeCodigos · alias y habilitaciones', () => {
+  it('guarda el nombre como alias y las habilitaciones elegidas; respeta códigos numéricos y alfanuméricos', () => {
+    const e = crearEstadoEjemplo();
+    const n = crearPersonasDesdeCodigos(e, ['10000001', 'A1234B', 'EMP 50'], crearGeneradorIds('nueva'), {
+      alias: new Map([['10000001', 'PERSONA UNO'], ['a1234b', 'PERSONA DOS']]),
+      habilitaciones: ['area-x'],
+    });
+    const nuevas = n.personas.slice(-3);
+    expect(nuevas.map((p) => [p.codigo, p.alias, p.habilitaciones])).toEqual([
+      ['10000001', 'PERSONA UNO', ['area-x']],
+      ['A1234B', 'PERSONA DOS', ['area-x']],
+      ['EMP-50', null, ['area-x']],
+    ]);
+  });
+  it('acepta el alias como objeto', () => {
+    const n = crearPersonasDesdeCodigos(crearEstadoEjemplo(), ['10000001'], undefined, { alias: { '10000001': 'PERSONA UNO' } });
+    expect(n.personas.at(-1)?.alias).toBe('PERSONA UNO');
+  });
+});
+
+describe('ponerAliasDesdeNombres', () => {
+  it('solo rellena a quien no tiene alias', () => {
+    const e = crearEstadoEjemplo();
+    const [a, b] = e.personas;
+    e.personas = e.personas.map((p) => (p.id === b?.id ? { ...p, alias: 'YA TIENE' } : { ...p, alias: null }));
+    const n = ponerAliasDesdeNombres(e, { [a!.codigo]: 'PERSONA UNO', [b!.codigo]: 'PERSONA DOS' });
+    expect(n.personas.find((p) => p.id === a?.id)?.alias).toBe('PERSONA UNO');
+    expect(n.personas.find((p) => p.id === b?.id)?.alias).toBe('YA TIENE');
+    expect(ponerAliasDesdeNombres(n, { [a!.codigo]: 'OTRO' })).toBe(n);
+  });
+});
+
+describe('guardarHorarios e impactoGuardarHorarios', () => {
+  const sem = (lunes: string): HorarioSemana => ({ lunes, turnos: [], actualizado: null });
+  it('guarda varias semanas y reemplaza las existentes', () => {
+    const e = conHorario();
+    const n = guardarHorarios(e, [sem(LUNES), sem('2026-12-07')]);
+    expect(Object.keys(n.horarios).sort()).toEqual([LUNES, '2026-12-07']);
+    expect(n.horarios[LUNES]?.turnos).toEqual([]);
+    expect(guardarHorarios(e, [])).toBe(e);
+  });
+  it('cuenta semanas nuevas, reemplazadas y personas que no figuran', () => {
+    const imp = impactoGuardarHorarios(conHorario(), [sem(LUNES), sem('2026-12-07')]);
+    expect(imp.bloqueos).toEqual([]);
+    expect(imp.efectos[0]).toBe('Guardará 1 semana nueva de horario');
+    expect(imp.efectos[1]).toBe('Reemplazará el horario de 1 semana que ya lo tenía');
+    expect(imp.efectos.at(-1)).toContain('personas activas no figuran y no trabajarán en esas semanas');
   });
 });

@@ -27,7 +27,7 @@ Guía rápida para hacer los cuadrantes semanales. Está pensada para consultarl
 
 ## 2. Primer día: comprobar lo básico
 
-Arriba verás las secciones: Cuadrante, Personas, Puestos, Reglas, Rotación, Incidencias y Datos.
+Arriba verás las secciones: Cuadrante, Personas, Puestos, Reglas, Rotación, Incidencias, Horarios y Datos.
 
 ### Puestos
 
@@ -55,7 +55,7 @@ Arriba verás las secciones: Cuadrante, Personas, Puestos, Reglas, Rotación, In
 
 ### Pasos
 
-1. Importa el horario de la semana que te han pasado (justo debajo, «Importar el horario de la plantilla»). Si lo guardas y pulsas **Ir a la semana**, ya estarás en el Cuadrante de esa semana.
+1. Importa el horario que te han pasado en la página **Horarios** (justo debajo, «Importar el horario de la plantilla»). Si lo guardas y pulsas **Ir a la semana**, ya estarás en el Cuadrante de esa semana.
 2. Abre **Cuadrante** y elige la semana con **Semana anterior**, **Esta semana**, **Semana siguiente** o «Ir a la semana de».
 3. Pulsa **Generar semana** (más abajo, los modos).
 4. Revisa el resultado y pulsa **Aplicar**.
@@ -66,27 +66,31 @@ Arriba verás las secciones: Cuadrante, Personas, Puestos, Reglas, Rotación, In
 
 El horario dice quién trabaja cada día y a qué horas; el cuadrante reparte después a esas personas entre los puestos. Si una semana no tiene horario, la aplicación puede asignar a cualquiera a cualquier hora (el Cuadrante te lo recuerda con un aviso y un botón **Importar horario**).
 
-1. Abre **Datos**: la primera tarjeta es **Horario de la plantilla**.
-2. Elige la semana con **Semana anterior**, **Semana siguiente** o el campo de fecha. Por defecto sale la semana siguiente a hoy.
-3. En Excel, selecciona la tabla (los códigos y los días), cópiala con Ctrl+C y pégala en «Pega aquí el horario copiado de Excel».
-4. Pulsa **Leer horario**. Verás una tabla persona por día con lo que se ha entendido (por ejemplo «10:00–15:45», «Libra») y, en rojo y con texto, las casillas que no se entienden.
-5. Si salen códigos que no existen, pulsa **Crear las N personas que faltan** (se crean sin habilitaciones; complétalas después en Personas).
-6. Corrige en Excel lo que haya dado error y vuelve a pegar. Mientras haya errores no se puede guardar. Los avisos (por ejemplo, personas activas que no figuran en el horario) no bloquean.
-7. Pulsa **Guardar horario de la semana**. Se te explicará el efecto (si reemplaza un horario anterior, si hay asignaciones que quedan fuera de turno…) y confirmas.
-8. Pulsa **Ir a la semana** para abrir el Cuadrante de esa semana.
+El horario que da la empresa es una tabla sin cabecera: una fila por persona con su **número de empleado**, su **nombre** y **una columna por cada día del año**, desde el 1 de enero. También vale con códigos como `A1234B` o `EMP-07`, sin la columna del nombre, o con solo una semana (siete columnas).
+
+1. Abre la página **Horarios**.
+2. En Excel, copia con Ctrl+C todas las filas de las personas, con su número y nombre y todos los días, y pégalas en «Pega aquí el horario copiado de Excel».
+3. Pulsa **Leer horario**. Verás en una frase lo detectado («6 personas · 365 días, del 01/01/2026 al 31/12/2026 · 51 semanas completas»). Si la tabla no trae fechas, comprueba el **Primer día de la tabla** (con 365 o 366 columnas se propone el 1 de enero de este año); al cambiarlo se vuelve a leer.
+4. En **Semanas a guardar**, elige «Desde la semana del» y «hasta la semana del». Por defecto sale desde la semana actual hasta la última semana completa. Las semanas que la tabla solo cubre en parte (al principio y al final del año) no se pueden guardar.
+5. Revisa la **vista previa** de una semana (puedes cambiar de semana): cada persona y día con su turno, «No trabaja (V)» si la casilla solo trae un código, y «Cerrado» si nadie tiene nada ese día.
+6. Lee los **avisos**: los códigos sin horas («Códigos sin horario: L (412), V (96)…») significan que esos días no trabaja; no se guarda el motivo.
+7. Si hay personas nuevas, aparece «Se crearán N personas». Deja marcada «Guardar el nombre como alias (solo en este navegador)» si quieres ver el nombre, elige las áreas en las que quedan habilitadas (todas, por defecto) y pulsa **Crear las N personas**.
+8. Pulsa **Guardar el horario de N semanas**. Se te explicará el efecto (semanas nuevas y reemplazadas, asignaciones que quedan fuera de turno, personas activas que no figuran…) y confirmas. Si hay una hora mal escrita en esas semanas, se muestra y no deja guardar hasta que la corrijas en Excel y vuelvas a pegar.
+9. Pulsa **Ir a la semana del…** para abrir el Cuadrante en la primera semana guardada.
 
 **Qué se puede escribir en cada casilla**
 
-- Una hora de entrada y de salida: `10:00-15:45`, `10-15:45`, `10.00 a 15.45`, `10h-15:45h`.
+- Una hora de entrada y de salida: `15:20 22:10` (separadas por espacios, como lo da la empresa), `10:00-15:45`, `10-15:45`, `10.00 a 15.45`, `10h-15:45h`.
+- Dos tramos seguidos: `08:30 14:00 17:00 21:00`.
 - Turno partido: `10-14 y 17-21`, `10:00-14:00 / 17:00-21:00` o `10-14, 17-21`.
 - Una letra de turno: `M` (mañana) o `T` (tarde), también `mañana` o `tarde`; `M+T` junta los dos.
 - Libra: casilla vacía, `L`, `V`, `libre`, `libranza`, `permiso`, `descanso`, `descanso semanal`, `fiesta`, `-`, y cualquier texto que empiece por `baja` o `vac` (`Baja médica`, `Vac.`, `vacaciones`). No se guarda el texto ni el motivo.
 - Las horas pueden llevar segundos (`10:00:00-15:45:00`). Una casilla de Excel con varios tramos en líneas distintas (Alt+Intro) se entiende como turno partido.
-- Cualquier otra cosa se marca como error.
+- Cualquier otro texto sin horas (`E`, `B`, `V7R`, `VKS`…) significa que ese día no trabaja y se resume en los avisos. Una hora mal escrita (`15:2O 22:10`, `25:00 26:00`) se marca como error.
 
 Las letras se pueden cambiar o ampliar en **Turnos por letra** (letra, nombre y horas de cada turno, con **Añadir turno**). Esos ajustes solo valen mientras no cierres esa sección.
 
-Con la fila de cabecera (Lun, Mar… o fechas) las columnas se reconocen por nombre; si no hay cabecera, se toman siete columnas seguidas después de la de códigos, de lunes a domingo. Si un código sale repetido, vale la última fila.
+Si la primera fila es una cabecera de fechas o de nombres de día (Lun, Mar…), las columnas se reconocen por ella; si no hay cabecera, las columnas de días son consecutivas desde el primer día de la tabla (con siete o menos, de lunes a domingo). Si un código sale repetido, vale la última fila.
 
 **Ver, corregir y quitar horarios guardados.** Más abajo, **Semanas con horario** lista cada semana con sus personas y horas. **Ver y editar** abre una rejilla con una casilla por persona y día, con los mismos formatos de arriba; **Guardar cambios** los aplica y **Descartar cambios** los olvida. **Quitar** borra el horario de esa semana (con confirmación y se puede deshacer).
 
