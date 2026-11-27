@@ -678,3 +678,25 @@ asignación el martes 01/12 10:00–11:30», «EMP-07 libra según el horario de
 - **Cuadrante**: aviso bajo la barra de semana: «Horario de la plantilla cargado (27 personas)» o «Esta semana no tiene horario de la
   plantilla: se puede asignar a cualquiera a cualquier hora» con botón «Importar horario». En la vista Por persona, el turno de cada día.
 - **Resumen por persona**: horas de turno junto a las horas asignadas, si hay horario.
+
+## 14. Horario anual pegado desde la hoja de la empresa
+
+Formato real observado (datos de muestra con nombres cambiados; **no se guardan en el repositorio**): una fila por persona,
+sin cabecera: `número de empleado (8 cifras)` · `NOMBRE` · una columna por día **consecutivo de todo el año** (365 columnas desde
+el 1 de enero). Celdas: `15:20 22:10` (entrada y salida separadas por espacio), `L` libra (a veces con espacios), códigos sin horas
+(`V`, `E`, `B`, `V7R`, `VKS`, `VXS`, `VKY`, `VD6`, `VGZ`…: vacaciones, bajas u otros; **no se interpreta ni se guarda el motivo**),
+y casillas vacías (si una columna está vacía para todas las filas, es un día que no se abre).
+También debe valer con códigos alfanuméricos (`A1234B`) o EMP-xx.
+
+Decisiones:
+- **Persona:** el número o código va a `Persona.codigo`; el nombre, si viene, va a `Persona.alias` (solo vive en ese navegador y la
+  exportación puede excluirlo; casilla «Guardar el nombre como alias», marcada). En tests y en el repo solo datos ficticios.
+- **Celdas sin horas:** cualquier texto sin horas (que no parezca una hora mal escrita) = no trabaja ese día. Se resume como aviso
+  «Códigos sin horario: L (412), V (96), E (70)…: esos días no trabaja». Una hora mal escrita (`15:2O 22:10`, `25:00 26:00`) sí es error.
+- **Calendario:** si hay más de 7 columnas de día y no hay cabecera de fechas, se pide «Primer día de la tabla» (por defecto, 1 de enero
+  del año en curso si hay 365 o 366 columnas). Se convierten a `HorarioSemana` solo las **semanas completas** (lunes a domingo dentro
+  de la tabla); las semanas parciales del principio y del final se avisan y no se guardan. Se eligen las semanas a guardar
+  («desde la semana del … hasta la del …», por defecto desde la semana actual hasta el final).
+- **Página propia «Horarios»** (pestaña entre Incidencias y Datos) con la importación; se quita de Datos.
+- Personas nuevas: se crean con el código, el alias (nombre) y las **habilitaciones elegidas** en la importación (por defecto todas las
+  áreas activas), para que el generador pueda usarlas desde el primer momento.
