@@ -664,6 +664,8 @@ asignación el martes 01/12 10:00–11:30», «EMP-07 libra según el horario de
 (mismo patrón «persona + motivo + asignación» que el resto de motivos de la regla). `edicion/cuadrante.motivoNoDisponible`: 'fuera de su turno' / 'libra según el horario'.
 **Horario y rotación:** si la semana tiene horario de la plantilla, el horario manda: no se aplican los `diasLibres` del patrón de rotación esa semana
 (el horario ya es el real que pasan); lo hacen `personaDisponible` y `edicion/cuadrante.motivoNoDisponible`. Sin horario, sigue mandando el patrón.
+**Horario y equipo:** si la semana tiene horario de la plantilla (`semanaConHorario`), `respetarEquipo` (evaluar y comprobar) no se aplica esa semana
+a las personas que figuran en él (`figuraEnHorario`): su turno ya dice cuándo trabajan. Quien no figura sigue sujeto a su equipo.
 `borrarPersona` quita también sus turnos. `comprobarCoherencia` avisa de turnos de personas inexistentes o con fecha fuera de su semana.
 
 ### 13.3 Interfaz
@@ -702,3 +704,18 @@ Implementación (H3): `leerCalendario` y `horariosDesdeCalendario` en `src/impor
 `ponerAliasDesdeNombres` y las opciones de `crearPersonasDesdeCodigos` en `src/edicion/horarios.ts`; interfaz en `src/ui/secciones/Horarios.tsx`.
 `leerCelda` ya no da error por texto sin horas (devuelve `codigo`); solo es error lo que parece una hora mal escrita. Las celdas con error van en
 `LecturaCalendario.celdasConError` y solo bloquean si caen en las semanas elegidas (`errores` es solo de estructura). `leerHorario` (semanal) se conserva por compatibilidad.
+
+### 14.1 Correcciones de la revisión (importación anual)
+
+- **Equipo de las personas nuevas:** `equiposDesdeCalendario(lectura, corte, desde?, hasta?)` (`importar/horario.ts`) da 'M' si al menos el 80 % de los
+  tramos empieza antes de `config.corteMananaTarde`, 'T' si al menos el 80 % después y 'A' si mezcla; `crearPersonasDesdeCodigos` lo recibe en `opciones.equipos`.
+- **Columna de nombre:** es nombre si casi ninguna de sus celdas es un horario ni un código que se repite en las columnas siguientes (ya no depende de que
+  «parezca un nombre»); sin cabecera, si solo una de las dos lecturas deja 7 o 365/366 (año supuesto) columnas de día, esa decide. Sin primer día y con un
+  número de columnas que no cuadra con el año, error con el recuento de columnas y `LecturaCalendario.pidePrimerDia`.
+- **Filas irregulares:** el ancho de la tabla es el más frecuente; una fila con más o menos días avisa («La fila de X tiene N días y las demás M»), sus días
+  que faltan no se dan por libres (no están en `dias`) y `horariosDesdeCalendario` omite a esa persona en las semanas que le faltan; las columnas de más se ignoran.
+- **Errores de celda:** `celdasConError` lleva `personaId`; solo cuenta la última fila de cada código y la interfaz solo bloquea los de personas con `personaId`.
+- **Letras de turno:** en `leerCalendario` están desactivadas salvo `opciones.usarLetras` («Usar letras de turno»). `PARECE_HORA` exige «:» o «.» entre cifras o un tramo con guion (`V6H` es un código).
+- **Días sin nadie:** aviso «Nadie trabaja esos días (columna vacía para todos): 01/01, 06/01…»; `cerrarPuestosEnDias` / `cierresNuevos` (`edicion/horarios.ts`) crean
+  `puestoCerrado` de todos los puestos activos (días seguidos en una incidencia) en el mismo `aplicar` de guardar si está marcada «Crear cierres para los días sin nadie».
+- **Personas que no figuran:** `personasSinHorario` y `desactivarPersonasSinHorario` (`edicion/horarios.ts`) alimentan el botón «Desactivar las N personas que no figuran en el horario» (con confirmación, un solo paso de deshacer).

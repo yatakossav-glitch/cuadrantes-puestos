@@ -4,7 +4,7 @@
  */
 import { NOMBRES_DIA, esFechaISO, hoyISO, lunesDe, sumarDias } from '../modelo/fechas';
 import { aHora } from '../modelo/horas';
-import type { DatosPlanificacion, FechaISO, HorarioSemana, Id, Intervalo, TurnoDia } from '../modelo/tipos';
+import type { DatosPlanificacion, Equipo, FechaISO, HorarioSemana, Id, Intervalo, TurnoDia } from '../modelo/tipos';
 import { normalizarCodigo } from '../persistencia/coherencia';
 
 // ───────────────────────── Tipos públicos ─────────────────────────
@@ -135,8 +135,8 @@ function unir(tramos: Intervalo[]): Intervalo[] | null {
 const TOKEN_HORA = String.raw`\d{1,2}[:.]\d{2}`;
 /** Varias horas sueltas separadas por espacios: «15:20 22:10» o «08:30 14:00 17:00 21:00» (entrada, salida, entrada, salida…). */
 const PATRON_HORAS_SUELTAS = new RegExp(String.raw`^${TOKEN_HORA}(?:\s+${TOKEN_HORA})+$`);
-/** ¿Tiene pinta de una hora o tramo mal escrito? (dígitos junto a «:», dígitos con guion o «12h»). */
-const PARECE_HORA = /\d\s*:|:\s*\d|\d\s*[-–—]\s*\d|\d\s*h(?![\p{L}])/u;
+/** ¿Tiene pinta de una hora o tramo mal escrito? (dígitos junto a «:», «.» entre cifras o un tramo con guion). «V6H» o «12h» sueltos son códigos. */
+const PARECE_HORA = /\d\s*:|:\s*\d|\d\.\d|\d\s*[-–—]\s*\d/u;
 
 function aMinTexto(token: string): number | null {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec(token);
@@ -546,7 +546,9 @@ export interface LecturaCalendario {
   /** Bloquean cualquier guardado: estructura de la tabla. */
   errores: string[];
   /** Celdas con una hora mal escrita; bloquean solo si caen en las semanas a guardar. */
-  celdasConError: { codigo: string; fecha: FechaISO; mensaje: string }[];
+  celdasConError: { codigo: string; personaId: Id | null; fecha: FechaISO; mensaje: string }[];
+  /** true si falta el primer día de la tabla (hay que pedirlo en la interfaz). */
+  pidePrimerDia: boolean;
   avisos: string[];
   codigosDesconocidos: { codigo: string; nombre: string | null }[];
 }
@@ -555,23 +557,14 @@ export interface OpcionesCalendario {
   primerDia: FechaISO | null;
   /** Fecha de hoy (para proponer el año y la semana por defecto). Por defecto, la del reloj. */
   hoy?: FechaISO;
+  /** Entender las letras de turno (M, T…) como horarios. Por defecto no: en la tabla anual son códigos sin horas. */
+  usarLetras?: boolean;
 }
 
 const esCodigoPlausible = (t: string): boolean =>
   /^\d{4,12}$/.test(t) ||
   (/^[\p{L}\d]{3,16}$/u.test(t) && /\p{L}/u.test(t) && /\d/.test(t)) ||
   /^emp[\s_.-]*\d+$/i.test(t);
-
-const PATRON_NOMBRE = /^\p{L}[\p{L}\s.'’·,-]*$/u;
-/** Nombre con espacios y algún dígito suelto («PERSONA 1»): empieza por letra y no tiene ':' (no es una hora). */
-const PATRON_NOMBRE_CON_DIGITOS = /^\p{L}[\p{L}\d.'’·,-]*\s[\p{L}\d\s.'’·,-]*$/u;
-
-function pareceNombre(t: string): boolean {
-  const simple = PATRON_NOMBRE.test(t) && (/\s/.test(t) || t.length >= 4);
-  if (!simple && !PATRON_NOMBRE_CON_DIGITOS.test(t)) return false;
-  const n = normalizarTexto(t);
-  return !PALABRAS_LIBRE.has(n) && !PATRON_LIBRE_PREFIJO.test(n);
-}
 
 const f2 = (n: number) => String(n).padStart(2, '0');
 const corto = (f: FechaISO) => `${f.slice(8, 10)}/${f.slice(5, 7)}`;
@@ -633,9 +626,10 @@ export function leerCalendario(
   opciones: OpcionesCalendario,
 ): LecturaCalendario {
   const hoy = opciones.hoy ?? hoyISO();
+  const letrasUsadas: readonly TurnoConLetra[] = opciones.usarLetras ? letras : [];
   const lectura: LecturaCalendario = {
     filas: [], primerDia: null, ultimoDia: null, semanas: [], semanasParciales: [], diasCerrados: [],
-    codigosSinHorario: [], columnas: '', errores: [], celdasConError: [], avisos: [], codigosDesconocidos: [],
+    codigosSinHorario: [], columnas: '', errores: [], celdasConError: [], pidePrimerDia: false, avisos: [], codigosDesconocidos: [],
   };
   const lineas: { linea: number; texto: string }[] = [];
   partirLineas(texto).forEach((t, i) => {
@@ -711,11 +705,50 @@ export function leerCalendario(
     return lectura;
   }
 
-  // Columna de nombres (opcional): contigua al código.
+  // Ancho de la tabla: el más frecuente entre las filas con código (si empatan, el mayor).
+  const anchos = new Map<number, number>();
+  for (const f of filasDatos) {
+    const bruto = (f.celdas[colCodigo] ?? '').trim();
+    if (bruto === '' || (!existentes.has(normalizarCodigo(bruto)) && !esCodigoPlausible(bruto))) continue;
+    anchos.set(f.celdas.length, (anchos.get(f.celdas.length) ?? 0) + 1);
+  }
+  let anchoModal = ancho;
+  let vecesModal = 0;
+  for (const [a, n] of anchos) {
+    if (n > vecesModal || (n === vecesModal && a > anchoModal)) {
+      anchoModal = a;
+      vecesModal = n;
+    }
+  }
+
+  // Columna de nombres (opcional): contigua al código. Es nombre si casi ninguna de sus celdas es un horario
+  // ni un código de la tabla (L, V, V7R…: los que se repiten en las columnas siguientes).
   const esColNombre = (c: number): boolean => {
-    if (c < 0 || c >= ancho || columnasCabecera.has(c)) return false;
+    if (c < 0 || c >= anchoModal || columnasCabecera.has(c)) return false;
     const vals = filasDatos.map((f) => (f.celdas[c] ?? '').trim()).filter((v) => v !== '');
-    return vals.length > 0 && vals.filter(pareceNombre).length >= 0.6 * vals.length;
+    // Sin cabecera, el número de columnas de día decide si hay una semana (7) o un año entero: si solo cuadra con esta columna como nombre
+    // (o solo sin ella), no hace falta mirar su contenido.
+    if (c === colCodigo + 1 && columnasCabecera.size === 0) {
+      const anio = Number((opciones.primerDia ?? hoy).slice(0, 4));
+      const diasAnio = esFechaISO(`${anio}-02-29`) ? 366 : 365;
+      const cuadra = (n: number) => n === 7 || n === diasAnio;
+      const sin = cuadra(anchoModal - colCodigo - 1);
+      const con = cuadra(anchoModal - colCodigo - 2);
+      if (sin !== con) return con;
+    }
+    if (vals.length === 0) return c > colCodigo && columnasCabecera.size > 0;
+    const tipicos = new Map<string, number>();
+    for (const f of filasDatos) {
+      for (let k = Math.max(colCodigo, c) + 1; k < anchoModal; k++) {
+        const cel = leerCelda(f.celdas[k] ?? '', letrasUsadas);
+        if (cel.codigo !== undefined) tipicos.set(cel.codigo, (tipicos.get(cel.codigo) ?? 0) + 1);
+      }
+    }
+    const esDato = (v: string): boolean => {
+      const cel = leerCelda(v, letrasUsadas);
+      return cel.tramos.length > 0 || cel.error !== null || (cel.codigo !== undefined && (tipicos.get(cel.codigo) ?? 0) >= 2);
+    };
+    return vals.filter(esDato).length < 0.2 * vals.length;
   };
   let colNombre: number | null = null;
   if (esColNombre(colCodigo + 1)) colNombre = colCodigo + 1;
@@ -731,7 +764,7 @@ export function leerCalendario(
   } else {
     const columnasDia: number[] = [];
     if (columnaNombreDia.size > 0) columnaNombreDia.forEach((_, c) => columnasDia.push(c));
-    else for (let c = primeraColDia; c < ancho; c++) columnasDia.push(c);
+    else for (let c = primeraColDia; c < anchoModal; c++) columnasDia.push(c);
     if (columnasDia.length === 0) {
       lectura.errores.push('No encuentro las columnas de los días: tras el código y el nombre debe haber una columna por cada día');
       return lectura;
@@ -748,11 +781,17 @@ export function leerCalendario(
     } else {
       let primero = opciones.primerDia;
       if (primero === null || !esFechaISO(primero)) {
-        if (columnasDia.length === 365 || columnasDia.length === 366) {
-          primero = `${hoy.slice(0, 4)}-01-01`;
+        const anio = Number(hoy.slice(0, 4));
+        const diasAnio = esFechaISO(`${anio}-02-29`) ? 366 : 365;
+        if (columnasDia.length === diasAnio) {
+          primero = `${anio}-01-01`;
           lectura.avisos.push(`Se ha supuesto que la tabla empieza el ${largo(primero)}. Si no es así, cambia el primer día de la tabla`);
         } else {
-          lectura.errores.push('Indica el primer día de la tabla');
+          lectura.pidePrimerDia = true;
+          lectura.errores.push(
+            `Indica el primer día de la tabla: se han contado ${columnasDia.length} columnas de días (desde la columna ${primeraColDia + 1}) y un año completo tiene ${diasAnio}. ` +
+              'Si la tabla debería tener un año entero, revisa si falta o sobra alguna columna, por ejemplo la del nombre.',
+          );
           return lectura;
         }
       }
@@ -767,7 +806,7 @@ export function leerCalendario(
   const leer = (t: string): CeldaLeida => {
     let c = memoria.get(t);
     if (!c) {
-      c = leerCelda(t, letras);
+      c = leerCelda(t, letrasUsadas);
       memoria.set(t, c);
     }
     return c;
@@ -776,6 +815,9 @@ export function leerCalendario(
   const conteo = new Map<string, number>();
   const desconocidos = new Map<string, string | null>();
   const vacioPorFecha = new Map<FechaISO, boolean>();
+  const erroresCelda: { clave: string; linea: number; codigo: string; personaId: Id | null; fecha: FechaISO; mensaje: string }[] = [];
+  const filasIrregulares: string[] = [];
+  const ultimaColumnaDia = columnasDia.length > 0 ? (columnasDia[columnasDia.length - 1] as number) : -1;
   let ignoradas = 0;
   for (const fila of filasDatos) {
     const bruto = (fila.celdas[colCodigo] ?? '').trim();
@@ -790,11 +832,17 @@ export function leerCalendario(
     const nombreBruto = colNombre === null ? '' : (fila.celdas[colNombre] ?? '').trim();
     const nombre = nombreBruto === '' ? null : nombreBruto;
     const dias = new Map<FechaISO, CeldaLeida>();
+    const largoFila = fila.celdas.length;
+    const diasDeLaFila = columnasDia.filter((c) => c < largoFila).length + Math.max(0, largoFila - Math.max(anchoModal, ultimaColumnaDia + 1));
+    if (diasDeLaFila !== columnasDia.length) {
+      filasIrregulares.push(`La fila de ${codigo} tiene ${diasDeLaFila} ${diasDeLaFila === 1 ? 'día' : 'días'} y las demás ${columnasDia.length}`);
+    }
     for (const c of columnasDia) {
+      if (c >= largoFila) continue; // la fila no llega hasta esa columna: ese día no consta para la persona (no se da por libre)
       const fecha = fechaDeColumna.get(c) as FechaISO;
       const cel = leer(fila.celdas[c] ?? '');
       dias.set(fecha, cel);
-      if (cel.error !== null) lectura.celdasConError.push({ codigo, fecha, mensaje: cel.error });
+      if (cel.error !== null) erroresCelda.push({ clave, linea: fila.linea, codigo, personaId: persona ? persona.id : null, fecha, mensaje: cel.error });
       else if (cel.codigo !== undefined) conteo.set(cel.codigo, (conteo.get(cel.codigo) ?? 0) + 1);
       if (cel.texto !== '') vacioPorFecha.set(fecha, false);
       else if (!vacioPorFecha.has(fecha)) vacioPorFecha.set(fecha, true);
@@ -806,6 +854,16 @@ export function leerCalendario(
   if (lectura.filas.length === 0) {
     lectura.errores.push('No hay ninguna fila con el número o código de una persona');
     return lectura;
+  }
+  // Solo cuenta la última fila de cada código (las anteriores se descartan).
+  lectura.celdasConError = erroresCelda
+    .filter((e) => e.linea === repetidos.get(e.clave)?.at(-1))
+    .map(({ codigo, personaId, fecha, mensaje }) => ({ codigo, personaId, fecha, mensaje }));
+  if (filasIrregulares.length > 0) {
+    lectura.avisos.push(
+      `${filasIrregulares.slice(0, 5).join('; ')}${filasIrregulares.length > 5 ? `; y ${filasIrregulares.length - 5} filas más con otra longitud` : ''}. ` +
+        'Los días que faltan no se dan por libres: esas semanas quedan incompletas para esa persona y no se guardan; las columnas de más se ignoran',
+    );
   }
   if (ignoradas > 0) lectura.avisos.push(`Se han ignorado ${ignoradas} ${ignoradas === 1 ? 'línea' : 'líneas'} cuyo primer dato no parece un número o código de persona`);
   for (const [clave, ls] of repetidos) {
@@ -832,7 +890,10 @@ export function leerCalendario(
     lectura.avisos.push(`Semanas incompletas en la tabla (no se pueden guardar): ${lista(lectura.semanasParciales.map((l) => `la del ${corto(l)}`))}`);
   }
   if (lectura.diasCerrados.length > 0) {
-    lectura.avisos.push(`Días sin ningún horario (se toman como cerrados): ${lista(lectura.diasCerrados.map(corto))}`);
+    const unico = lectura.diasCerrados.length === 1;
+    lectura.avisos.push(
+      `Nadie trabaja ${unico ? 'ese día' : 'esos días'} (columna vacía para todos): ${lista(lectura.diasCerrados.map(corto), 8)}. Puedes marcarlos como cerrados al guardar`,
+    );
   }
   const resumen = resumirCodigosSinHorario(lectura.codigosSinHorario);
   if (resumen) lectura.avisos.push(resumen);
@@ -856,12 +917,44 @@ export function horariosDesdeCalendario(
     .map((lunes) => {
       const turnos: TurnoDia[] = [];
       for (const [personaId, fila] of porPersona) {
-        for (let i = 0; i < 7; i++) {
-          const fecha = sumarDias(lunes, i);
+        const fechasSemana = Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
+        // Semana incompleta para esta persona (a su fila le faltan días): no figura esa semana.
+        if (!fechasSemana.every((f) => fila.dias.has(f))) continue;
+        for (const fecha of fechasSemana) {
           const c = fila.dias.get(fecha);
           turnos.push({ personaId, fecha, tramos: c && c.error === null ? c.tramos.map((t) => ({ inicio: t.inicio, fin: t.fin })) : [] });
         }
       }
       return { lunes, turnos, actualizado: ahora };
     });
+}
+
+/**
+ * Equipo de cada persona según los tramos de su horario: 'M' si casi todos empiezan antes del corte mañana/tarde,
+ * 'T' si casi todos empiezan después, 'A' si mezcla. Solo personas con algún tramo; se pueden limitar las fechas.
+ * La clave es el código de la fila (el mismo de `codigosDesconocidos`).
+ */
+export function equiposDesdeCalendario(
+  lectura: LecturaCalendario,
+  corte: number,
+  desde?: FechaISO,
+  hasta?: FechaISO,
+  umbral = 0.8,
+): Map<string, Equipo> {
+  const resultado = new Map<string, Equipo>();
+  for (const fila of lectura.filas) {
+    let manana = 0;
+    let tarde = 0;
+    for (const [fecha, c] of fila.dias) {
+      if ((desde !== undefined && fecha < desde) || (hasta !== undefined && fecha > hasta) || c.error !== null) continue;
+      for (const t of c.tramos) {
+        if (t.inicio < corte) manana += 1;
+        else tarde += 1;
+      }
+    }
+    const total = manana + tarde;
+    if (total === 0) continue;
+    resultado.set(fila.codigo, manana >= umbral * total ? 'M' : tarde >= umbral * total ? 'T' : 'A');
+  }
+  return resultado;
 }

@@ -5,7 +5,7 @@ import type { EstadoApp, HorarioSemana, Intervalo } from '../modelo/tipos';
 import { leerHorario, letrasPorDefecto } from '../importar/horario';
 import {
   cambiarTurno, crearPersonasDesdeCodigos, describirTurno, enTurno, figuraEnHorario, guardarHorario, horarioDesdeLectura,
-  guardarHorarios, impactoGuardarHorario, impactoGuardarHorarios, minutosDeTurno, ponerAliasDesdeNombres, quitarHorario, semanaConHorario, turnoDe,
+  guardarHorarios, cerrarPuestosEnDias, cierresNuevos, desactivarPersonasSinHorario, personasSinHorario, impactoGuardarHorario, impactoGuardarHorarios, minutosDeTurno, ponerAliasDesdeNombres, quitarHorario, semanaConHorario, turnoDe,
 } from './horarios';
 
 const LUNES = '2026-11-30';
@@ -230,5 +230,53 @@ describe('guardarHorarios e impactoGuardarHorarios', () => {
     expect(imp.efectos[0]).toBe('Guardará 1 semana nueva de horario');
     expect(imp.efectos[1]).toBe('Reemplazará el horario de 1 semana que ya lo tenía');
     expect(imp.efectos.at(-1)).toContain('personas activas no figuran y no trabajarán en esas semanas');
+  });
+});
+
+describe('crearPersonasDesdeCodigos · equipo', () => {
+  it('usa el equipo indicado por código y M si no hay', () => {
+    const n = crearPersonasDesdeCodigos(crearEstadoEjemplo(), ['10000001', '10000002', '10000003'], crearGeneradorIds('nueva'), {
+      equipos: new Map([['10000001', 'T'], ['10000002', 'A']]),
+    });
+    expect(n.personas.slice(-3).map((p) => [p.codigo, p.equipo])).toEqual([['10000001', 'T'], ['10000002', 'A'], ['10000003', 'M']]);
+  });
+});
+
+describe('personas que no figuran en el horario', () => {
+  const horarios: HorarioSemana[] = [{ lunes: LUNES, actualizado: null, turnos: [{ personaId: 'per-01', fecha: LUNES, tramos: [M] }] }];
+  it('lista a las activas que no figuran y las desactiva sin borrarlas', () => {
+    const e = crearEstadoEjemplo();
+    e.personas = e.personas.map((p) => (p.id === 'per-03' ? { ...p, activa: false } : p));
+    const sin = personasSinHorario(e, horarios);
+    expect(sin).toHaveLength(e.personas.length - 2);
+    expect(sin.some((p) => p.id === 'per-01' || p.id === 'per-03')).toBe(false);
+    const n = desactivarPersonasSinHorario(e, horarios);
+    expect(n.personas).toHaveLength(e.personas.length);
+    expect(n.personas.filter((p) => p.activa).map((p) => p.id)).toEqual(['per-01']);
+    expect(e.personas.filter((p) => p.activa)).toHaveLength(e.personas.length - 1);
+  });
+  it('devuelve el mismo estado si no hay nadie que desactivar', () => {
+    const e = crearEstadoEjemplo();
+    const todos: HorarioSemana[] = [{ lunes: LUNES, actualizado: null, turnos: e.personas.map((p) => ({ personaId: p.id, fecha: LUNES, tramos: [] })) }];
+    expect(desactivarPersonasSinHorario(e, todos)).toBe(e);
+  });
+});
+
+describe('cerrarPuestosEnDias', () => {
+  it('crea un cierre por puesto activo y tramo de días seguidos, sin repetir los que ya existen', () => {
+    const e = crearEstadoEjemplo();
+    const activos = e.puestos.filter((p) => p.activo);
+    const dias = ['2026-12-24', '2026-12-25', '2026-12-31'];
+    expect(cierresNuevos(e, dias)).toBe(activos.length * 2);
+    const n = cerrarPuestosEnDias(e, dias, crearGeneradorIds('inc'));
+    const nuevos = n.incidencias.slice(e.incidencias.length);
+    expect(nuevos).toHaveLength(activos.length * 2);
+    expect(nuevos.every((i) => i.tipo === 'puestoCerrado')).toBe(true);
+    expect(nuevos.filter((i) => i.tipo === 'puestoCerrado' && i.puestoId === activos[0]!.id).map((i) => [i.desde, i.hasta])).toEqual([
+      ['2026-12-24', '2026-12-25'],
+      ['2026-12-31', '2026-12-31'],
+    ]);
+    expect(cerrarPuestosEnDias(n, dias)).toBe(n);
+    expect(cierresNuevos(n, dias)).toBe(0);
   });
 });

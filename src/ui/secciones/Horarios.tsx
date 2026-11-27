@@ -2,15 +2,19 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
   cambiarTurno,
+  cerrarPuestosEnDias,
+  cierresNuevos,
   crearPersonasDesdeCodigos,
+  desactivarPersonasSinHorario,
   describirTurno,
   guardarHorarios,
   impactoGuardarHorarios,
   minutosDeTurno,
+  personasSinHorario,
   ponerAliasDesdeNombres,
   quitarHorario,
 } from '../../edicion/horarios';
-import { horariosDesdeCalendario, letrasPorDefecto, leerCalendario, leerCelda } from '../../importar/horario';
+import { equiposDesdeCalendario, horariosDesdeCalendario, letrasPorDefecto, leerCalendario, leerCelda } from '../../importar/horario';
 import type { CeldaLeida, LecturaCalendario, TurnoConLetra } from '../../importar/horario';
 import { NOMBRES_DIA, NOMBRES_DIA_CORTO, fechasSemana, formatearDiaFecha, formatearFecha, hoyISO, lunesDe, sumarDias } from '../../modelo/fechas';
 import { duracion, formatearDuracion } from '../../modelo/horas';
@@ -275,6 +279,7 @@ interface Leido {
   /** Primer día indicado por la usuaria; null = lo propone la lectura. */
   primerDia: FechaISO | null;
   letras: TurnoConLetra[];
+  usarLetras: boolean;
 }
 
 const lista = (xs: readonly string[], max = 6) => (xs.length > max ? `${xs.slice(0, max).join(', ')} y ${xs.length - max} más` : xs.join(', '));
@@ -290,6 +295,10 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
   const [desdeElegido, setDesdeElegido] = useState<FechaISO | null>(null);
   const [hastaElegido, setHastaElegido] = useState<FechaISO | null>(null);
   const [semanaVista, setSemanaVista] = useState<FechaISO | null>(null);
+  const [usarLetras, setUsarLetras] = useState(false);
+  const [primerDiaPuesto, setPrimerDiaPuesto] = useState<FechaISO | null>(null);
+  const [conCierres, setConCierres] = useState(true);
+  const [desactivando, setDesactivando] = useState(false);
   const [conAlias, setConAlias] = useState(true);
   const [sinHabilitar, setSinHabilitar] = useState<ReadonlySet<Id>>(new Set());
   const [confirmando, setConfirmando] = useState(false);
@@ -313,7 +322,7 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
   }, [peticion]);
 
   // Solo se relee al pulsar «Leer horario», al cambiar el primer día o si cambian las personas (crear personas).
-  const lectura = useMemo(() => (leido ? leerCalendario(leido.texto, estado, leido.letras, { primerDia: leido.primerDia }) : null), [leido, estado]);
+  const lectura = useMemo(() => (leido ? leerCalendario(leido.texto, estado, leido.letras, { primerDia: leido.primerDia, usarLetras: leido.usarLetras }) : null), [leido, estado]);
 
   const hoyLunes = lunesDe(hoyISO());
   const semanas = lectura?.semanas ?? [];
@@ -329,7 +338,8 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
   const erroresEnRango = useMemo(() => {
     if (!lectura) return [];
     const elegidas = new Set(horarios.flatMap((h) => fechasSemana(h.lunes)));
-    const malas = lectura.celdasConError.filter((c) => elegidas.has(c.fecha));
+    // Solo bloquean las horas mal escritas de personas que existen o se van a guardar (las de códigos sin crear se ignoran).
+    const malas = lectura.celdasConError.filter((c) => c.personaId !== null && elegidas.has(c.fecha));
     const textos = malas.slice(0, 10).map((c) => `${c.codigo} el ${formatearDiaFecha(c.fecha)}: ${c.mensaje}`);
     if (malas.length > 10) textos.push(`y ${malas.length - 10} casillas más con errores`);
     return textos;
@@ -347,8 +357,14 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
   ).length;
   const hayNombres = nuevas.some((n) => n.nombre) || existentesSinAlias > 0;
 
+  const hastaFin = sumarDias(hasta, 6);
+  const diasSinNadie = useMemo(() => (lectura?.diasCerrados ?? []).filter((f) => f >= desde && f <= hastaFin), [lectura, desde, hastaFin]);
+  const cierresACrear = conCierres && horarios.length > 0 ? cierresNuevos(estado, diasSinNadie) : 0;
+  const sinFigurar = useMemo(() => personasSinHorario(estado, horarios), [estado, horarios]);
+
   function leer(primerDia: FechaISO | null) {
-    setLeido({ texto: area.current?.value ?? '', primerDia, letras });
+    setPrimerDiaPuesto(primerDia);
+    setLeido({ texto: area.current?.value ?? '', primerDia, letras, usarLetras });
     setDesdeElegido(null);
     setHastaElegido(null);
     setSemanaVista(null);
@@ -360,27 +376,37 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
   function crearPersonas() {
     const aliasPorCodigo = conAlias ? new Map(nuevas.filter((n) => n.nombre).map((n) => [n.codigo, n.nombre as string])) : undefined;
     const habilitaciones = areasActivas.filter((a) => !sinHabilitar.has(a.id)).map((a) => a.id);
+    const equipos = lectura ? equiposDesdeCalendario(lectura, estado.config.corteMananaTarde, desde, hastaFin) : undefined;
     almacen.aplicar('Crear personas del horario', (e) =>
-      crearPersonasDesdeCodigos(e, nuevas.map((n) => n.codigo), undefined, { alias: aliasPorCodigo, habilitaciones }),
+      crearPersonasDesdeCodigos(e, nuevas.map((n) => n.codigo), undefined, { alias: aliasPorCodigo, habilitaciones, equipos }),
     );
   }
 
   function guardar() {
     if (horarios.length === 0) return;
     const aGuardar = horarios;
+    const dias = diasSinNadie;
     almacen.aplicar(`Guardar el horario de ${plural(aGuardar.length, 'semana', 'semanas')}`, (e) => {
       const r = guardarHorarios(e, aGuardar);
-      return conAlias ? ponerAliasDesdeNombres(r, nombres) : r;
+      const conNombres = conAlias ? ponerAliasDesdeNombres(r, nombres) : r;
+      return conCierres ? cerrarPuestosEnDias(conNombres, dias) : conNombres;
     });
     setConfirmando(false);
     setGuardado({ primera: aGuardar[0]!.lunes, semanas: aGuardar.length });
     setLeido(null);
+    setPrimerDiaPuesto(null);
     if (area.current) area.current.value = '';
     setHayTexto(false);
   }
 
   const semanasGuardadas = Object.keys(estado.horarios).sort();
-  const impacto = confirmando && horarios.length > 0 ? impactoGuardarHorarios(estado, horarios) : null;
+  const impacto = useMemo(() => {
+    if (!confirmando || horarios.length === 0) return null;
+    const base = impactoGuardarHorarios(estado, horarios);
+    return cierresACrear > 0
+      ? { ...base, efectos: [...base.efectos, `Creará ${plural(cierresACrear, 'cierre de puesto', 'cierres de puesto')} para ${plural(diasSinNadie.length, 'día sin nadie', 'días sin nadie')}`] }
+      : base;
+  }, [confirmando, estado, horarios, cierresACrear, diasSinNadie]);
   const bloqueado = !lectura || lectura.errores.length > 0 || erroresEnRango.length > 0 || horarios.length === 0;
   const textoSemanas = plural(horarios.length, 'semana', 'semanas');
   const primerDiaCampo = leido?.primerDia ?? lectura?.primerDia ?? null;
@@ -406,7 +432,10 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
           ref={area}
           rows={6}
           wrap="off"
-          onInput={(e) => setHayTexto(e.currentTarget.value.trim() !== '')}
+          onInput={(e) => {
+            setHayTexto(e.currentTarget.value.trim() !== '');
+            setPrimerDiaPuesto(null); // otro texto: el primer día de la tabla anterior ya no vale
+          }}
           aria-describedby="hp-ayuda-pegar"
         />
       </label>
@@ -415,10 +444,17 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
         partidos (08:30 14:00 17:00 21:00) y códigos como L o V (ese día no trabaja).
       </p>
 
-      <EditorLetras letras={letras} alCambiar={setLetras} />
+      <Interruptor
+        id="hp-usar-letras"
+        etiqueta="Usar letras de turno (M, T…) como horarios"
+        valor={usarLetras}
+        onCambio={setUsarLetras}
+      />
+      <p class="ayuda">Desmarcada, una M o una T suelta en la tabla es un código sin horas (ese día no trabaja), como L o V.</p>
+      {usarLetras && <EditorLetras letras={letras} alCambiar={setLetras} />}
 
       <div class="fila">
-        <button type="button" class="boton primario" disabled={!hayTexto} onClick={() => leer(leido?.primerDia ?? null)}>
+        <button type="button" class="boton primario" disabled={!hayTexto} onClick={() => leer(primerDiaPuesto)}>
           Leer horario
         </button>
       </div>
@@ -441,7 +477,7 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
             </p>
           )}
           <p class="ayuda">{lectura.columnas}</p>
-          {!conCabeceraDeFechas && (lectura.filas.length > 0 || lectura.errores.includes('Indica el primer día de la tabla')) && (
+          {!conCabeceraDeFechas && (lectura.filas.length > 0 || lectura.pidePrimerDia) && (
             <CampoFecha
               id="hp-primer-dia"
               etiqueta="Primer día de la tabla"
@@ -539,6 +575,45 @@ export function Horarios({ almacen, alIrASemana, peticion = null }: PropsHorario
                     </>
                   )}
                 </>
+              )}
+
+              {sinFigurar.length > 0 && horarios.length > 0 && (
+                <>
+                  <p>
+                    {plural(sinFigurar.length, 'persona activa no figura', 'personas activas no figuran')} en las semanas a guardar (por ejemplo, las de ejemplo) y no trabajarán.
+                  </p>
+                  <div class="fila">
+                    <button type="button" class="boton" onClick={() => setDesactivando(true)}>
+                      Desactivar {sinFigurar.length === 1 ? 'la persona que no figura' : `las ${sinFigurar.length} personas que no figuran`} en el horario
+                    </button>
+                  </div>
+                  {desactivando && (
+                    <Confirmacion
+                      id="hp-conf-desactivar"
+                      titulo="Desactivar personas"
+                      texto={`Se desactivará a ${plural(sinFigurar.length, 'persona', 'personas')} que no figuran en el horario: ${lista(sinFigurar.map((p) => p.codigo))}. No se borran y se pueden volver a activar; se puede deshacer.`}
+                      textoConfirmar="Sí, desactivar"
+                      alConfirmar={() => {
+                        const aDesactivar = horarios;
+                        almacen.aplicar('Desactivar las personas que no figuran en el horario', (e) => desactivarPersonasSinHorario(e, aDesactivar));
+                        setDesactivando(false);
+                      }}
+                      alCancelar={() => setDesactivando(false)}
+                    />
+                  )}
+                </>
+              )}
+
+              {diasSinNadie.length > 0 && (
+                <Interruptor
+                  id="hp-cierres"
+                  etiqueta="Crear cierres para los días sin nadie"
+                  valor={conCierres}
+                  onCambio={setConCierres}
+                />
+              )}
+              {diasSinNadie.length > 0 && (
+                <p class="ayuda">Marcar esos días como cerrados: {lista(diasSinNadie.map((f) => `${f.slice(8, 10)}/${f.slice(5, 7)}`), 8)}. Se cierran todos los puestos activos y se guardan con el horario.</p>
               )}
 
               <h3>7. Guardar</h3>

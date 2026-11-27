@@ -70,23 +70,25 @@ El horario que da la empresa es una tabla sin cabecera: una fila por persona con
 
 1. Abre la página **Horarios**.
 2. En Excel, copia con Ctrl+C todas las filas de las personas, con su número y nombre y todos los días, y pégalas en «Pega aquí el horario copiado de Excel».
-3. Pulsa **Leer horario**. Verás en una frase lo detectado («6 personas · 365 días, del 01/01/2026 al 31/12/2026 · 51 semanas completas»). Si la tabla no trae fechas, comprueba el **Primer día de la tabla** (con 365 o 366 columnas se propone el 1 de enero de este año); al cambiarlo se vuelve a leer.
+3. Pulsa **Leer horario**. Verás en una frase lo detectado («6 personas · 365 días, del 01/01/2026 al 31/12/2026 · 51 semanas completas»). Si la tabla no trae fechas, comprueba el **Primer día de la tabla** (si el número de columnas de días es el de un año entero de este año, se propone el 1 de enero; si no, la aplicación te dice cuántas columnas ha contado y te pide el primer día); al cambiarlo se vuelve a leer. Si pegas otro texto, el primer día se vuelve a pedir.
 4. En **Semanas a guardar**, elige «Desde la semana del» y «hasta la semana del». Por defecto sale desde la semana actual hasta la última semana completa. Las semanas que la tabla solo cubre en parte (al principio y al final del año) no se pueden guardar.
 5. Revisa la **vista previa** de una semana (puedes cambiar de semana): cada persona y día con su turno, «No trabaja (V)» si la casilla solo trae un código, y «Cerrado» si nadie tiene nada ese día.
-6. Lee los **avisos**: los códigos sin horas («Códigos sin horario: L (412), V (96)…») significan que esos días no trabaja; no se guarda el motivo.
-7. Si hay personas nuevas, aparece «Se crearán N personas». Deja marcada «Guardar el nombre como alias (solo en este navegador)» si quieres ver el nombre, elige las áreas en las que quedan habilitadas (todas, por defecto) y pulsa **Crear las N personas**.
-8. Pulsa **Guardar el horario de N semanas**. Se te explicará el efecto (semanas nuevas y reemplazadas, asignaciones que quedan fuera de turno, personas activas que no figuran…) y confirmas. Si hay una hora mal escrita en esas semanas, se muestra y no deja guardar hasta que la corrijas en Excel y vuelvas a pegar.
-9. Pulsa **Ir a la semana del…** para abrir el Cuadrante en la primera semana guardada.
+6. Lee los **avisos**: los códigos sin horas («Códigos sin horario: L (412), V (96)…») significan que esos días no trabaja; no se guarda el motivo. «Nadie trabaja esos días (columna vacía para todos): 01/01, 06/01, 25/12…» marca los días sin abrir. Si una fila tiene más o menos días que las demás («La fila de 10000009 tiene 200 días y las demás 365»), los días que faltan no se dan por libres: esa persona no figura en esas semanas.
+   - **Crear cierres para los días sin nadie** (marcada por defecto): al guardar, cierra todos los puestos activos en esos días, dentro de las semanas elegidas.
+7. Si hay personas nuevas, aparece «Se crearán N personas». Deja marcada «Guardar el nombre como alias (solo en este navegador)» si quieres ver el nombre, elige las áreas en las que quedan habilitadas (todas, por defecto) y pulsa **Crear las N personas**. El equipo (mañana, tarde o ambos) de cada persona nueva se deduce de sus horas: mañana si casi todos sus tramos empiezan antes del corte de mañana y tarde, tarde si casi todos empiezan después, y ambos si mezcla. Con horario de la plantilla en la semana, la regla «Respetar equipo» no se aplica a quien figura en él: su turno ya dice cuándo trabaja.
+8. Si hay personas activas que no figuran en ninguna de las semanas a guardar (por ejemplo, las de ejemplo EMP-xx), aparece **Desactivar las N personas que no figuran en el horario**. Pide confirmación, no borra a nadie y se deshace con un solo paso.
+9. Pulsa **Guardar el horario de N semanas**. Se te explicará el efecto (semanas nuevas y reemplazadas, asignaciones que quedan fuera de turno, personas activas que no figuran…) y confirmas. Si hay una hora mal escrita en esas semanas, se muestra y no deja guardar hasta que la corrijas en Excel y vuelvas a pegar.
+10. Pulsa **Ir a la semana del…** para abrir el Cuadrante en la primera semana guardada.
 
 **Qué se puede escribir en cada casilla**
 
 - Una hora de entrada y de salida: `15:20 22:10` (separadas por espacios, como lo da la empresa), `10:00-15:45`, `10-15:45`, `10.00 a 15.45`, `10h-15:45h`.
 - Dos tramos seguidos: `08:30 14:00 17:00 21:00`.
 - Turno partido: `10-14 y 17-21`, `10:00-14:00 / 17:00-21:00` o `10-14, 17-21`.
-- Una letra de turno: `M` (mañana) o `T` (tarde), también `mañana` o `tarde`; `M+T` junta los dos.
+- Una letra de turno: `M` (mañana) o `T` (tarde), también `mañana` o `tarde`; `M+T` junta los dos. Solo se entienden si marcas **Usar letras de turno** antes de pulsar Leer horario; si no, son códigos sin horas (ese día no trabaja).
 - Libra: casilla vacía, `L`, `V`, `libre`, `libranza`, `permiso`, `descanso`, `descanso semanal`, `fiesta`, `-`, y cualquier texto que empiece por `baja` o `vac` (`Baja médica`, `Vac.`, `vacaciones`). No se guarda el texto ni el motivo.
 - Las horas pueden llevar segundos (`10:00:00-15:45:00`). Una casilla de Excel con varios tramos en líneas distintas (Alt+Intro) se entiende como turno partido.
-- Cualquier otro texto sin horas (`E`, `B`, `V7R`, `VKS`…) significa que ese día no trabaja y se resume en los avisos. Una hora mal escrita (`15:2O 22:10`, `25:00 26:00`) se marca como error.
+- Cualquier otro texto sin horas (`E`, `B`, `V7R`, `VKS`…) significa que ese día no trabaja y se resume en los avisos. Una hora mal escrita (`15:2O 22:10`, `25:00 26:00`) se marca como error; códigos como `V6H` no lo son. Solo bloquean el guardado las horas mal escritas de personas que existen o se van a crear, y de la última fila de cada código.
 
 Las letras se pueden cambiar o ampliar en **Turnos por letra** (letra, nombre y horas de cada turno, con **Añadir turno**). Esos ajustes solo valen mientras no cierres esa sección.
 

@@ -8,12 +8,14 @@ import { aHora, contiene, duracion, intervaloValido } from '../modelo/horas';
 import { nuevoId } from '../modelo/ids';
 import type {
   DatosPlanificacion,
+  Equipo,
   EstadoApp,
   FechaISO,
   HorarioSemana,
   Id,
   Intervalo,
   Minutos,
+  Persona,
   Puesto,
   TurnoDia,
 } from '../modelo/tipos';
@@ -215,6 +217,8 @@ export interface OpcionesCrearPersonas {
   alias?: ReadonlyMap<string, string> | Readonly<Record<string, string>>;
   /** Ids de áreas o puestos para los que quedan habilitadas las personas nuevas. */
   habilitaciones?: readonly Id[];
+  /** Equipo por código (p. ej. deducido del horario); sin entrada, el de por defecto. */
+  equipos?: ReadonlyMap<string, Equipo> | Readonly<Record<string, Equipo>>;
 }
 
 function mapaDeAlias(alias: OpcionesCrearPersonas['alias']): Map<string, string> {
@@ -222,6 +226,13 @@ function mapaDeAlias(alias: OpcionesCrearPersonas['alias']): Map<string, string>
   if (!alias) return r;
   const pares = alias instanceof Map ? [...alias] : Object.entries(alias);
   for (const [codigo, nombre] of pares) if (nombre.trim() !== '') r.set(normalizarCodigo(codigo), nombre.trim());
+  return r;
+}
+
+function mapaDeEquipos(equipos: OpcionesCrearPersonas['equipos']): Map<string, Equipo> {
+  const r = new Map<string, Equipo>();
+  if (!equipos) return r;
+  for (const [codigo, equipo] of equipos instanceof Map ? [...equipos] : Object.entries(equipos)) r.set(normalizarCodigo(codigo), equipo);
   return r;
 }
 
@@ -240,6 +251,7 @@ export function crearPersonasDesdeCodigos(
 ): EstadoApp {
   let resultado = estado;
   const alias = mapaDeAlias(opciones.alias);
+  const equipos = mapaDeEquipos(opciones.equipos);
   const vistos = new Set(estado.personas.map((p) => normalizarCodigo(p.codigo)));
   for (const texto of codigos) {
     const codigo = codigoParaCrear(texto);
@@ -250,6 +262,7 @@ export function crearPersonasDesdeCodigos(
       ...crearPersona(resultado, ids),
       codigo,
       alias: alias.get(clave) ?? null,
+      equipo: equipos.get(clave) ?? 'M',
       habilitaciones: [...(opciones.habilitaciones ?? [])],
     });
   }
@@ -316,4 +329,60 @@ export function impactoGuardarHorarios(estado: EstadoApp, horarios: readonly Hor
     );
   }
   return { bloqueos: [], efectos };
+}
+
+// ───────────────────────── Personas que no figuran y cierres de días sin nadie ─────────────────────────
+
+/** Personas activas que no figuran en ninguna de las semanas dadas. */
+export function personasSinHorario(estado: EstadoApp, horarios: readonly HorarioSemana[]): Persona[] {
+  const figuran = new Set(horarios.flatMap((h) => h.turnos.map((t) => t.personaId)));
+  return estado.personas.filter((p) => p.activa && !figuran.has(p.id));
+}
+
+/** Desactiva (no borra) a las personas activas que no figuran en ninguna de las semanas dadas. */
+export function desactivarPersonasSinHorario(estado: EstadoApp, horarios: readonly HorarioSemana[]): EstadoApp {
+  const ids = new Set(personasSinHorario(estado, horarios).map((p) => p.id));
+  if (ids.size === 0) return estado;
+  return { ...estado, personas: estado.personas.map((p) => (ids.has(p.id) ? { ...p, activa: false } : p)) };
+}
+
+/** Fechas (únicas y ordenadas) que aún no tienen cierre en ese puesto. */
+function fechasPorPuesto(estado: EstadoApp, puestoId: Id, fechas: readonly FechaISO[]): FechaISO[] {
+  const cierres = estado.incidencias.filter((i) => i.tipo === 'puestoCerrado' && i.puestoId === puestoId);
+  return [...new Set(fechas)].sort().filter((f) => !cierres.some((c) => f >= c.desde && f <= c.hasta));
+}
+
+/** Cuántos cierres (un puesto, un tramo de días seguidos) crearía `cerrarPuestosEnDias`. */
+export function cierresNuevos(estado: EstadoApp, fechas: readonly FechaISO[]): number {
+  let n = 0;
+  for (const p of estado.puestos) {
+    if (!p.activo) continue;
+    let anterior: FechaISO | null = null;
+    for (const f of fechasPorPuesto(estado, p.id, fechas)) {
+      if (anterior === null || sumarDias(anterior, 1) !== f) n += 1;
+      anterior = f;
+    }
+  }
+  return n;
+}
+
+/** Crea incidencias «puesto cerrado» de todos los puestos activos para esos días (los seguidos van en una sola incidencia; no repite cierres que ya existen). */
+export function cerrarPuestosEnDias(estado: EstadoApp, fechas: readonly FechaISO[], ids: () => Id = () => nuevoId('inc')): EstadoApp {
+  const nuevas: EstadoApp['incidencias'] = [];
+  for (const p of estado.puestos) {
+    if (!p.activo) continue;
+    let tramo: { desde: FechaISO; hasta: FechaISO } | null = null;
+    const cerrar = () => {
+      if (tramo) nuevas.push({ id: ids(), tipo: 'puestoCerrado', puestoId: p.id, desde: tramo.desde, hasta: tramo.hasta, nota: '' });
+    };
+    for (const f of fechasPorPuesto(estado, p.id, fechas)) {
+      if (tramo && sumarDias(tramo.hasta, 1) === f) tramo.hasta = f;
+      else {
+        cerrar();
+        tramo = { desde: f, hasta: f };
+      }
+    }
+    cerrar();
+  }
+  return nuevas.length === 0 ? estado : { ...estado, incidencias: [...estado.incidencias, ...nuevas] };
 }

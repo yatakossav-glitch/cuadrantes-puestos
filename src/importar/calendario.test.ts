@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { crearEstadoEjemplo, crearEstadoVacio } from '../datos-ejemplo/ejemplo';
 import { sumarDias } from '../modelo/fechas';
 import { aMinutos } from '../modelo/horas';
-import { horariosDesdeCalendario, leerCalendario, letrasPorDefecto, resumirCodigosSinHorario } from './horario';
+import { equiposDesdeCalendario, horariosDesdeCalendario, leerCalendario, leerCelda, letrasPorDefecto, resumirCodigosSinHorario } from './horario';
 
 const datos = crearEstadoEjemplo();
 const vacio = crearEstadoVacio();
@@ -61,12 +61,15 @@ describe('leerCalendario · formato anual de la empresa', () => {
   });
   it('sin primer día y otro número de columnas pide el primer día', () => {
     const r = leerCalendario(tabla(personas6, 40, celdaAnual), vacio, letras, { primerDia: null, hoy: HOY });
-    expect(r.errores).toEqual(['Indica el primer día de la tabla']);
+    expect(r.errores).toHaveLength(1);
+    expect(r.errores[0]).toContain('Indica el primer día de la tabla');
+    expect(r.errores[0]).toContain('se han contado 40 columnas de días');
+    expect(r.pidePrimerDia).toBe(true);
   });
   it('columnas vacías para todos son días cerrados', () => {
     const r = leerCalendario(tabla(personas6, 14, (p, d) => (d === 3 ? '' : 'M')), vacio, letras, { primerDia: '2026-03-02', hoy: HOY });
     expect(r.diasCerrados).toEqual(['2026-03-05']);
-    expect(r.avisos.some((a) => a.includes('cerrados') && a.includes('05/03'))).toBe(true);
+    expect(r.avisos.some((a) => a.startsWith('Nadie trabaja ese día (columna vacía para todos): 05/03'))).toBe(true);
     expect(r.semanas).toEqual(['2026-03-02', '2026-03-09']);
   });
   it('una hora mal escrita queda en celdasConError sin bloquear la estructura', () => {
@@ -119,19 +122,19 @@ describe('leerCalendario · códigos y columnas', () => {
 
 describe('leerCalendario · formato semanal (≤ 7 columnas)', () => {
   it('se comporta como una semana que empieza en el lunes del primer día', () => {
-    const r = leerCalendario('EMP-01\tM\tM\tT\tT\tL\tL\tL\nEMP-02\tT\tT\tM\tM\tL\tL\tL', datos, letras, { primerDia: '2026-12-02', hoy: HOY });
+    const r = leerCalendario('EMP-01\tM\tM\tT\tT\tL\tL\tL\nEMP-02\tT\tT\tM\tM\tL\tL\tL', datos, letras, { primerDia: '2026-12-02', hoy: HOY, usarLetras: true });
     expect(r.errores).toEqual([]);
     expect(r.semanas).toEqual(['2026-11-30']);
     expect(r.semanasParciales).toEqual([]);
     expect(r.filas[0]?.dias.get('2026-12-02')?.tramos).toEqual(letras[1]?.tramos);
   });
   it('sin primer día toma la semana que viene y lo avisa', () => {
-    const r = leerCalendario('EMP-01\tM\tM\tT\tT\tL\tL\tL', datos, letras, { primerDia: null, hoy: HOY });
+    const r = leerCalendario('EMP-01\tM\tM\tT\tT\tL\tL\tL', datos, letras, { primerDia: null, hoy: HOY, usarLetras: true });
     expect(r.semanas).toEqual(['2026-11-30']);
     expect(r.avisos[0]).toContain('No has indicado el primer día');
   });
   it('con cabecera de nombres de día usa las columnas por nombre', () => {
-    const r = leerCalendario('Código\tMar\tLun\nEMP-01\tT\tM', datos, letras, { primerDia: '2026-11-30', hoy: HOY });
+    const r = leerCalendario('Código\tMar\tLun\nEMP-01\tT\tM', datos, letras, { primerDia: '2026-11-30', hoy: HOY, usarLetras: true });
     expect(r.filas[0]?.dias.get('2026-11-30')?.tramos).toEqual(letras[0]?.tramos);
     expect(r.filas[0]?.dias.get('2026-12-01')?.tramos).toEqual(letras[1]?.tramos);
     expect(r.semanasParciales).toEqual(['2026-11-30']);
@@ -171,5 +174,102 @@ describe('leerCalendario · rendimiento', () => {
     expect(r.filas).toHaveLength(40);
     expect(r.errores).toEqual([]);
     expect(ms).toBeLessThan(300);
+  });
+});
+
+describe('leerCalendario · columna de nombre', () => {
+  const opc = { primerDia: null, hoy: HOY };
+  const hoyAnual = (nombres: string[]) => {
+    const filas = nombres.map((n, i) => [String(10000001 + i), n, ...Array.from({ length: 365 }, (_, d) => (d % 7 > 4 ? 'L' : d === 3 ? 'V7R' : '15:20 22:10'))].join('\t'));
+    return leerCalendario(filas.join('\n'), vacio, letras, opc);
+  };
+  it('un nombre corto («ANA») o con paréntesis («MARIA (H)») no desplaza los días', () => {
+    const r = hoyAnual(['ANA', 'MARIA (H)', 'PERSONA UNO']);
+    expect(r.errores).toEqual([]);
+    expect(r.filas.map((f) => f.nombre)).toEqual(['ANA', 'MARIA (H)', 'PERSONA UNO']);
+    expect(r.primerDia).toBe('2026-01-01');
+    expect(r.filas[0]?.dias.get('2026-01-01')?.tramos).toEqual([t('15:20', '22:10')]);
+    expect(r.filas[0]?.dias.get('2026-01-04')?.codigo).toBe('V7R');
+  });
+  it('una columna de nombre vacía no se toma por el 1 de enero', () => {
+    const r = hoyAnual(['', '', '']);
+    expect(r.errores).toEqual([]);
+    expect(r.columnas).toContain('nombre en la columna 2');
+    expect(r.filas[0]?.dias.get('2026-01-01')?.tramos).toEqual([t('15:20', '22:10')]);
+  });
+  it('sin nombre y con el número de columnas que no cuadra con un año, pide el primer día y cuenta las columnas', () => {
+    const filas = ['10000001', '10000002'].map((c) => [c, ...Array.from({ length: 364 }, () => 'L')].join('\t'));
+    const r = leerCalendario(filas.join('\n'), vacio, letras, opc);
+    expect(r.pidePrimerDia).toBe(true);
+    expect(r.errores[0]).toContain('se han contado 364 columnas de días');
+  });
+});
+
+describe('leerCalendario · filas irregulares', () => {
+  const opc = { primerDia: '2026-03-02', hoy: HOY };
+  const fila = (codigo: string, dias: number) => [codigo, `PERSONA ${codigo.slice(-1)}`, ...Array.from({ length: dias }, () => '10:00 15:45')].join('\t');
+  it('una fila corta avisa, no da por libres los días que faltan y deja esa semana sin ella', () => {
+    const texto = [fila('10000001', 14), fila('10000002', 14), fila('10000003', 10)].join('\n');
+    const r = leerCalendario(texto, vacio, letras, opc);
+    expect(r.errores).toEqual([]);
+    expect(r.avisos.some((a) => a.includes('La fila de 10000003 tiene 10 días y las demás 14'))).toBe(true);
+    expect(r.filas[2]?.dias.has('2026-03-12')).toBe(false);
+    const p = { ...vacio, personas: ['10000001', '10000003'].map((codigo, i) => ({ ...crearEstadoEjemplo().personas[0]!, id: `p${i}`, codigo })) };
+    const l = leerCalendario(texto, p, letras, opc);
+    const [s1, s2] = horariosDesdeCalendario(l, '2026-03-02', '2026-03-09');
+    expect(new Set(s1?.turnos.map((x) => x.personaId))).toEqual(new Set(['p0', 'p1']));
+    expect(new Set(s2?.turnos.map((x) => x.personaId))).toEqual(new Set(['p0']));
+  });
+  it('una fila con columnas de más avisa con su código y se ignoran las sobrantes (el ancho es el más frecuente)', () => {
+    const texto = [fila('10000001', 14), fila('10000002', 14), fila('10000003', 200)].join('\n');
+    const r = leerCalendario(texto, vacio, letras, opc);
+    expect(r.errores).toEqual([]);
+    expect(r.avisos.some((a) => a.includes('La fila de 10000003 tiene 200 días y las demás 14'))).toBe(true);
+    expect(r.ultimoDia).toBe('2026-03-15');
+  });
+});
+
+describe('leerCalendario · errores de celda', () => {
+  const opc = { primerDia: '2026-03-02', hoy: HOY };
+  it('traen la persona y solo cuenta la última fila de cada código', () => {
+    const buena = (c: string, x: string) => [c, `PERSONA ${c.slice(-1)}`, x, ...Array(6).fill('L')].join('\t');
+    const r = leerCalendario([buena('10000001', '15:2O 22:10'), buena('10000001', '10:00 15:45'), buena('10000002', '25:00 26:00')].join('\n'), vacio, letras, opc);
+    expect(r.celdasConError).toHaveLength(1);
+    expect(r.celdasConError[0]).toMatchObject({ codigo: '10000002', personaId: null, fecha: '2026-03-02' });
+  });
+});
+
+describe('leerCalendario · letras de turno y códigos tipo V6H', () => {
+  const texto = '10000001\tPERSONA UNO\tM\tT\tV6H\tL\tL\tL\tL';
+  it('por defecto M y T son códigos sin horas', () => {
+    const r = leerCalendario(texto, vacio, letras, { primerDia: '2026-03-02', hoy: HOY });
+    expect(r.filas[0]?.dias.get('2026-03-02')).toMatchObject({ libre: true, codigo: 'M' });
+    expect(r.celdasConError).toEqual([]);
+  });
+  it('con usarLetras se entienden como turnos', () => {
+    const r = leerCalendario(texto, vacio, letras, { primerDia: '2026-03-02', hoy: HOY, usarLetras: true });
+    expect(r.filas[0]?.dias.get('2026-03-02')?.tramos).toEqual(letras[0]?.tramos);
+    expect(r.celdasConError).toEqual([]);
+  });
+  it('V6H, 12h y similares son códigos, no horas mal escritas', () => {
+    for (const x of ['V6H', '12h', 'V7R']) expect(leerCelda(x, letras)).toMatchObject({ libre: true, error: null, codigo: x.toUpperCase() });
+    expect(leerCelda('15:2O 22:10', letras).error).not.toBeNull();
+    expect(leerCelda('10h-15', letras).error).toBeNull();
+  });
+});
+
+describe('leerCalendario · días sin nadie', () => {
+  it('avisa con las fechas y la columna vacía para todos', () => {
+    const r = leerCalendario(tabla(personas6, 14, (p, d) => (d === 3 || d === 10 ? '' : '10:00 15:45')), vacio, letras, { primerDia: '2026-03-02', hoy: HOY });
+    expect(r.avisos).toContain('Nadie trabaja esos días (columna vacía para todos): 05/03, 12/03. Puedes marcarlos como cerrados al guardar');
+  });
+});
+
+describe('equiposDesdeCalendario', () => {
+  it('M si casi todo es de mañana, T si de tarde, A si mezcla; ignora a quien no tiene tramos', () => {
+    const celda = (p: number, d: number) => (p === 0 ? '08:00 14:00' : p === 1 ? '16:00 22:00' : p === 2 ? (d % 2 ? '08:00 14:00' : '16:00 22:00') : 'L');
+    const l = leerCalendario(tabla(personas6.slice(0, 4), 14, celda), vacio, letras, { primerDia: '2026-03-02', hoy: HOY });
+    expect([...equiposDesdeCalendario(l, aMinutos('15:45'))]).toEqual([['10000001', 'M'], ['10000002', 'T'], ['10000003', 'A']]);
+    expect(equiposDesdeCalendario(l, aMinutos('15:45'), '2026-03-02', '2026-03-02').get('10000003')).toBe('T');
   });
 });

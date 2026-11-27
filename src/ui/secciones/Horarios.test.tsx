@@ -40,7 +40,7 @@ async function pegar(texto: string) {
   await act(() => boton('Leer horario').click());
 }
 /** Tabla anual ficticia de 2026: número, nombre y 365 columnas de días. */
-function anual(codigos: string[], celda: (p: number, d: number) => string = (p, d) => (d % 7 > 4 ? 'L  ' : 'M')): string {
+function anual(codigos: string[], celda: (p: number, d: number) => string = (p, d) => (d % 7 > 4 ? 'L  ' : '10:00 15:45')): string {
   return codigos.map((c, p) => [c, `PERSONA ${p + 1}`, ...Array.from({ length: 365 }, (_, d) => celda(p, d))].join('\t')).join('\n');
 }
 const fijar = async (id: string, valor: string) => {
@@ -50,7 +50,7 @@ const fijar = async (id: string, valor: string) => {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
-const TABLA = 'Código\tLun\tMar\tMié\tJue\tVie\tSáb\tDom\nEMP-01\t10:00-15:45\tT\tL\t10-14 y 17-21\tM\tL\tL\nEMP-02\t10:00-15:45\tL\tL\tL\tL\tL\tL';
+const TABLA = 'Código\tLun\tMar\tMié\tJue\tVie\tSáb\tDom\nEMP-01\t10:00-15:45\t15:45-22:00\tL\t10-14 y 17-21\t10:00-15:45\tL\tL\nEMP-02\t10:00-15:45\tL\tL\tL\tL\tL\tL';
 
 describe('Horarios', () => {
   it('es una página con título y deja Leer desactivado sin texto', async () => {
@@ -239,6 +239,67 @@ describe('Horarios', () => {
       await act(() => almacen.deshacer());
       expect(raiz.querySelector<HTMLInputElement>('input[aria-label="EMP-01, martes"]')!.value).toBe('15:45–22:00');
     });
+  });
+
+  it('al cambiar el texto pegado, el primer día de la tabla anterior vuelve a pedirse', async () => {
+    await montar();
+    await pegar(['10000001', 'PERSONA 1', ...Array(20).fill('L')].join('\t'));
+    await fijar('hp-primer-dia', '2026-11-30');
+    expect(raiz.textContent).toContain('20 días, del 30/11/2026');
+    await pegar(['10000002', 'PERSONA 2', ...Array(30).fill('L')].join('\t'));
+    expect(raiz.textContent).toContain('Indica el primer día de la tabla');
+    expect(raiz.querySelector('#hp-primer-dia')).not.toBeNull();
+  });
+
+  it('las letras de turno solo valen si se marca «Usar letras de turno»', async () => {
+    await montar();
+    await pegar('EMP-01\tM\tT\tL\tL\tL\tL\tL');
+    expect(raiz.textContent).toContain('No trabaja (M)');
+    await act(() => (raiz.querySelector('#hp-usar-letras') as HTMLInputElement).click());
+    await act(() => boton('Leer horario').click());
+    expect(raiz.textContent).not.toContain('No trabaja (M)');
+    expect(raiz.textContent).toContain('10:00–15:45');
+  });
+
+  it('una hora mal escrita de un código sin crear no bloquea; la de una persona sí', async () => {
+    await montar();
+    await pegar('10000001\tPERSONA 1\t15:2O 22:10\tL\tL\tL\tL\tL\tL');
+    expect(raiz.textContent).not.toContain('horas mal escritas');
+    expect(boton('Guardar el horario de 1 semana').disabled).toBe(false);
+  });
+
+  it('ofrece desactivar las personas que no figuran en el horario, con confirmación y un solo paso de deshacer', async () => {
+    const almacen = await montar();
+    await pegar(TABLA);
+    const activas = almacen.obtener().personas.filter((p) => p.activa).length;
+    await act(() => boton(`Desactivar las ${activas - 2} personas que no figuran en el horario`).click());
+    expect(raiz.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await act(() => boton('Cancelar').click());
+    expect(almacen.obtener().personas.filter((p) => p.activa)).toHaveLength(activas);
+    await act(() => boton(`Desactivar las ${activas - 2} personas que no figuran en el horario`).click());
+    await act(() => boton('Sí, desactivar').click());
+    expect(almacen.obtener().personas.filter((p) => p.activa).map((p) => p.codigo)).toEqual(['EMP-01', 'EMP-02']);
+    expect(almacen.obtener().personas).toHaveLength(activas);
+    await act(() => almacen.deshacer());
+    expect(almacen.obtener().personas.filter((p) => p.activa)).toHaveLength(activas);
+  });
+
+  it('crea cierres para los días sin nadie al guardar, salvo que se desmarque la casilla', async () => {
+    const almacen = await montar();
+    const antes = almacen.obtener().incidencias.length;
+    const puestos = almacen.obtener().puestos.filter((p) => p.activo).length;
+    const fila = 'EMP-01\t' + ['10:00-15:45', '', '10:00-15:45', 'L', 'L', 'L', 'L'].join('\t');
+    await pegar(fila);
+    expect(raiz.textContent).toContain('Nadie trabaja ese día (columna vacía para todos): 01/12');
+    expect((raiz.querySelector('#hp-cierres') as HTMLInputElement).checked).toBe(true);
+    await act(() => boton('Guardar el horario de 1 semana').click());
+    await act(() => boton('Sí, guardar horario').click());
+    const nuevas = almacen.obtener().incidencias.slice(antes);
+    expect(nuevas).toHaveLength(puestos);
+    expect(nuevas.every((i) => i.tipo === 'puestoCerrado' && i.desde === '2026-12-01' && i.hasta === '2026-12-01')).toBe(true);
+    await act(() => almacen.deshacer());
+    expect(almacen.obtener().incidencias).toHaveLength(antes);
+    expect(almacen.obtener().horarios).toEqual({});
   });
 
   it('una petición del Cuadrante pone la semana pedida como primera a guardar y enfoca el título', async () => {

@@ -118,6 +118,27 @@ describe('respetarEquipo · evaluar y comprobar', () => {
   });
 });
 
+describe('respetarEquipo · semana con horario de la plantilla', () => {
+  const regla = reglaDe('respetarEquipo');
+  const conHorario: DatosPlanificacion = {
+    ...crearEstadoEjemplo(),
+    horarios: { [LUNES]: { lunes: LUNES, actualizado: null, turnos: [{ personaId: 'per-01', fecha: JUEVES, tramos: [{ inicio: 16 * 60, fin: 21 * 60 }] }] } },
+  };
+  const tardeDe = (persona: string) => puesto(JUEVES, lego, 'franja-lego-8', persona);
+
+  it('no se aplica a quien figura en el horario de la semana (evaluar y comprobar)', () => {
+    const ctx = contexto([tardeDe('per-01')], conHorario);
+    expect(definicion.evaluar(regla, ctx)).toEqual([]);
+    expect(definicion.comprobar(regla, ctx, tardeDe('per-01'))).toEqual({ permitido: true, coste: 0, motivos: [] });
+  });
+  it('sigue aplicándose a quien no figura en el horario y en semanas sin horario', () => {
+    const otra = contexto([tardeDe('per-03')], conHorario);
+    expect(definicion.evaluar(regla, otra)).toHaveLength(1);
+    expect(definicion.comprobar(regla, otra, tardeDe('per-03')).permitido).toBe(false);
+    expect(definicion.evaluar(regla, contexto([tardeDe('per-01')]))).toHaveLength(1);
+  });
+});
+
 // ───────────── Coherencia de `comprobar` con `evaluar` (oráculo: evaluar sin y con la candidata) ─────────────
 
 function generadorAzar(semilla: number): () => number {

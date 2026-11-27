@@ -1,6 +1,8 @@
 import type { Comprobacion, ContextoEvaluacion, DefinicionReglaGeneral, Incumplimiento } from '../contrato';
 import { cuando, etiquetaPersona, incumplimientoGeneral } from '../util';
 import type { Asignacion, AsignacionPuesto, FechaISO, Id, ReglaGeneral } from '../../modelo/tipos';
+import { figuraEnHorario, semanaConHorario } from '../../edicion/horarios';
+import { lunesDe } from '../../modelo/fechas';
 import { aHora } from '../../modelo/horas';
 import type { DiaSemana } from '../../modelo/tipos';
 import type { MetadatosReglaGeneral } from '../metadatos';
@@ -42,6 +44,8 @@ export const metadatos: MetadatosReglaGeneral<'respetarEquipo'> = {
 
 /** ¿Es una franja contraria al equipo efectivo de la persona ese día? */
 function esContraria(a: AsignacionPuesto, ctx: ContextoEvaluacion): boolean {
+  // Con horario de la plantilla en la semana, su turno ya dice cuándo trabaja quien figura en él.
+  if (semanaConHorario(ctx.datos, a.fecha) && figuraEnHorario(ctx.datos, a.personaId, lunesDe(a.fecha))) return false;
   const equipo = ctx.indice.equipoEfectivo(a.personaId, a.fecha);
   const iv = ctx.indice.intervalo(a);
   if (equipo === 'A' || !iv) return false;
